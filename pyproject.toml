@@ -1,0 +1,22 @@
+[project]
+name = "referee-core"
+version = "0.1.0"
+description = "Deterministic measurement core for auditing computational oncology claims from prediction files"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "pandas", "scikit-learn", "pydantic>=2", "fastapi>=0.110"]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]
+
+[project.scripts]
+referee-core = "referee_core.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
