@@ -139,6 +139,17 @@ const INITIAL_LEDGER: VerdictRecord[] = [
 // In-memory ledger storage for the session with preloaded historical records
 let activeLedger: VerdictRecord[] = [...INITIAL_LEDGER];
 
+export type SystemStatus = 'RUNNING' | 'PAUSED' | 'STOPPED';
+let systemStatus: SystemStatus = 'STOPPED';
+
+export function getSystemStatus(): SystemStatus {
+  return systemStatus;
+}
+
+export function setSystemStatus(status: SystemStatus): void {
+  systemStatus = status;
+}
+
 export function getLedgerRecords(): VerdictRecord[] {
   return [...activeLedger];
 }

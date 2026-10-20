@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ShieldAlert, Database, Cpu, Lock, CheckCircle2, AlertTriangle, Layers, Brain } from 'lucide-react';
+import { ShieldAlert, Database, Cpu, Lock, CheckCircle2, AlertTriangle, Layers, Brain, FlaskConical, Sparkles } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -12,6 +12,10 @@ interface NavbarProps {
 export function Navbar({ activeTab, setActiveTab, blockCount }: NavbarProps) {
   const tabs = [
     { id: 'audit', label: 'Audit Console', icon: Cpu },
+    { id: 'tumortwin', label: 'TumorTwin Sim', icon: Cpu },
+    { id: 'hypothesis', label: 'Hypothesis Tournament', icon: Sparkles },
+    { id: 'questions', label: 'Research Agenda (10 Qs)', icon: FlaskConical },
+    { id: 'ingestion', label: 'Data Ingestion', icon: Database },
     { id: 'ledger', label: `Evidence Ledger (${blockCount})`, icon: Database },
     { id: 'repair', label: 'Recursive Repair (Bounded)', icon: Layers },
     { id: 'learning', label: 'Learning Engine (Reflexion)', icon: Brain },

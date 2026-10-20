@@ -1,0 +1,20 @@
+[
+  "tests/test_core.py::test_api_audit_and_verify_roundtrip",
+  "tests/test_core.py::test_auc_matches_sklearn_including_ties",
+  "tests/test_core.py::test_bootstrap_ci_coverage_against_analytic_binormal_auc",
+  "tests/test_core.py::test_bootstrap_is_deterministic_for_a_seed",
+  "tests/test_core.py::test_calibration_is_reported_only_when_scores_are_declared_probabilities",
+  "tests/test_core.py::test_calibration_matches_reference_and_detects_overconfidence",
+  "tests/test_core.py::test_cluster_bootstrap_is_wider_than_naive_when_samples_cluster",
+  "tests/test_core.py::test_inflating_the_claimed_number_is_caught_from_the_data",
+  "tests/test_core.py::test_malformed_tables_are_unverifiable_not_errors",
+  "tests/test_core.py::test_negative_control_gate_does_not_fail_clean_pipelines",
+  "tests/test_core.py::test_never_nan_explicit_refusals",
+  "tests/test_core.py::test_nuisance_flags_a_covariate_that_predicts_the_label",
+  "tests/test_core.py::test_patient_overlap_is_exact",
+  "tests/test_core.py::test_permutation_null_detects_signal_and_refuses_varying_labels",
+  "tests/test_core.py::test_report_hash_is_deterministic_and_tamper_evident",
+  "tests/test_core.py::test_reproduced_report_is_incomplete_and_says_baseline_not_assessed",
+  "tests/test_core.py::test_seeded_fault_suite_meets_the_proposed_targets",
+  "tests/test_core.py::test_split_description_text_cannot_change_the_verdict"
+]

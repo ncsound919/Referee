@@ -12,6 +12,10 @@ import { RecursiveRepairView } from '@/components/RecursiveRepairView';
 import { LedgerExplorerView } from '@/components/LedgerExplorerView';
 import { LicenseMatrixView } from '@/components/LicenseMatrixView';
 import { SelfLearningDashboard } from '@/components/SelfLearningDashboard';
+import { ResearchQuestionsView } from '@/components/ResearchQuestionsView';
+import { HypothesisTournamentView } from '@/components/HypothesisTournamentView';
+import { IngestionControlView } from '@/components/IngestionControlView';
+import { TumorTwinControlView } from '@/components/TumorTwinControlView';
 import {
   ClaimSpec,
   AuditResults,
@@ -23,7 +27,7 @@ import {
 } from '@/lib/types';
 import { SAMPLE_CLAIMS } from '@/lib/sample-claims';
 import { executeAuditPipeline, runRecursiveRepairLoop } from '@/lib/orchestrator';
-import { getLedgerRecords, verifyLedgerChain, addAuthorResponseToRecord } from '@/lib/ledger';
+import { getLedgerRecords, verifyLedgerChain, addAuthorResponseToRecord, setSystemStatus, SystemStatus } from '@/lib/ledger';
 import {
   getExperienceStore,
   applyUtilityDecay,
@@ -172,6 +176,22 @@ export default function Home() {
     return verifyLedgerChain();
   };
 
+  const handleRunAuditForQuestion = (claim: ClaimSpec) => {
+    setActiveTab('audit');
+    handleStartAudit(claim);
+  };
+
+  const handleRunAuditWithHypothesis = (claimText: string, domain: string) => {
+    setActiveTab('audit');
+    const customClaim: ClaimSpec = {
+      ...currentClaimSpec,
+      domain_task: domain as any,
+      title: `[Hypothesis Tournament]: ${claimText.slice(0, 50)}...`,
+      raw_claim_text: claimText,
+    };
+    handleStartAudit(customClaim);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Navbar */}
@@ -181,48 +201,50 @@ export default function Home() {
         blockCount={ledgerRecords.length}
       />
 
+      {/* Autonomous System Control Bar */}
+      <div className="bg-slate-900 border-b border-slate-800 p-3 flex justify-center space-x-4">
+        <button
+          onClick={async () => {
+            setSystemStatus('RUNNING');
+            await fetch('/api/autonomous/run', { method: 'POST' });
+          }}
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs"
+        >
+          START
+        </button>
+        <button 
+          onClick={() => setSystemStatus('PAUSED')}
+          className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs"
+        >
+          PAUSE
+        </button>
+        <button 
+          onClick={() => setSystemStatus('STOPPED')}
+          className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs"
+        >
+          STOP
+        </button>
+      </div>
+
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Hero Section: Full on Audit Console, Compact on Secondary Modules */}
-        {activeTab === 'audit' ? (
-          <div className="relative rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 p-6 sm:p-8 overflow-hidden shadow-2xl">
-            <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
-            <div className="max-w-3xl space-y-3">
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Deterministic Oncology Claim Referee</span>
-              </div>
-              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-100">
-                The Only Auditor That Knows Credible Oncology Claims.
-              </h1>
-              <p className="text-sm sm:text-base text-slate-400 leading-relaxed font-sans">
-                Routes computational oncology claims through a deterministic audit pipeline—license gate, domain-aware baseline harness, leakage detector, and statistical referee—and writes an immutable verdict to a public evidence ledger, including negative results.
-              </p>
-
-              {/* Non-Negotiable Agent Rules Chips */}
-              <div className="pt-2 flex flex-wrap gap-2 text-xs font-mono">
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 1: LLM Never Does Math
-                </span>
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 2: License is a Hard Gate
-                </span>
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 3: Missing Fields Are Unverifiable
-                </span>
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 4: Separate Generator & Auditor
-                </span>
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 5: Every Verdict In Ledger
-                </span>
-                <span className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-300">
-                  Rule 6: Max 10 Tool Calls
-                </span>
-              </div>
+        {/* Compact Header for Audit Tab */}
+        {activeTab === 'audit' && (
+          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs font-mono text-slate-400">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-slate-200 font-semibold">Deterministic Oncology Claim Referee</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-slate-400 hidden sm:inline">Rules 1–6 Enforced</span>
+            </div>
+            <div className="flex items-center space-x-2 text-[11px]">
+              <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                Ledger Blocks: #{ledgerRecords.length}
+              </span>
             </div>
           </div>
-        ) : (
+        )}
+        {activeTab !== 'audit' && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-mono text-slate-400">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -298,7 +320,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 2: Immutable Evidence Ledger */}
+        {/* TAB 2: TumorTwin Simulation */}
+        {activeTab === 'tumortwin' && <TumorTwinControlView />}
+
+        {/* TAB 3: Hypothesis Tournament */}
+        {activeTab === 'hypothesis' && (
+          <HypothesisTournamentView onRunAuditWithHypothesis={handleRunAuditWithHypothesis} />
+        )}
+
+        {/* TAB 4: Autonomous Research Questions */}
+        {activeTab === 'questions' && (
+          <ResearchQuestionsView onRunAuditForQuestion={handleRunAuditForQuestion} />
+        )}
+
+        {/* TAB 5: Data Ingestion */}
+        {activeTab === 'ingestion' && (
+          <IngestionControlView />
+        )}
+
+        {/* TAB 6: Immutable Evidence Ledger */}
         {activeTab === 'ledger' && (
           <LedgerExplorerView
             records={ledgerRecords}
@@ -307,7 +347,7 @@ export default function Home() {
           />
         )}
 
-        {/* TAB 3: Layer 5 Recursive Bounded Repair */}
+        {/* TAB 7: Layer 5 Recursive Bounded Repair */}
         {activeTab === 'repair' && (
           <RecursiveRepairView
             onRunRepair={handleRunRepair}
@@ -318,7 +358,7 @@ export default function Home() {
           />
         )}
 
-        {/* TAB 4: Self-Learning Architecture (Reflexion & Harness Library) */}
+        {/* TAB 8: Self-Learning Architecture (Reflexion & Harness Library) */}
         {activeTab === 'learning' && (
           <SelfLearningDashboard
             principles={principles}
@@ -330,7 +370,7 @@ export default function Home() {
           />
         )}
 
-        {/* TAB 5: M2 License Passports */}
+        {/* TAB 9: M2 License Passports */}
         {activeTab === 'licenses' && <LicenseMatrixView />}
       </main>
 

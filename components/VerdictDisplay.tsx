@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { VerdictRecord, VerdictType } from '@/lib/types';
+import { LaymanSummaryCard } from './LaymanSummaryCard';
+import { NextExperimentSetupCard } from './NextExperimentSetupCard';
 import {
   CheckCircle2,
   XCircle,
@@ -154,6 +156,12 @@ export function VerdictDisplay({ record, onNavigateToLedger }: VerdictDisplayPro
           {record.verdict_statement}
         </div>
       </div>
+
+      {/* Layman's Terms Final Analysis for Research & Auditing */}
+      <LaymanSummaryCard record={record} />
+
+      {/* Next Experiment Setup System Driven by Self-Learning */}
+      <NextExperimentSetupCard record={record} />
 
       {/* Scope Tested vs Scope Not Tested Matrix */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
