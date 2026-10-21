@@ -109,6 +109,7 @@ describe('Integration Unit Tests: API Routes without live server', () => {
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     const req = new Request('http://localhost/api/audit/test_claim_fetch_01');

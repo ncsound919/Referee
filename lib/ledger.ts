@@ -12,6 +12,10 @@ export { UNIVERSAL_CLAIM_LIMIT, DEMO_LEDGER_FIXTURES };
  */
 export function canonicalJson(obj: unknown): string {
   if (obj === null || typeof obj !== 'object') {
+    if (typeof obj === 'number' && Number.isFinite(obj)) {
+      // Round floats to 6 dp to match referee_core.audit.canonical (avoids BLAS jitter).
+      return JSON.stringify(Number(obj.toFixed(6)));
+    }
     return JSON.stringify(obj);
   }
   if (Array.isArray(obj)) {
@@ -33,53 +37,21 @@ export function canonicalJson(obj: unknown): string {
 export function computeBlockHash(
   blockHeight: number,
   previousBlockHash: string,
-  entry: {
-    claim_id: string;
-    timestamp: string;
-    verdict: VerdictType;
-    title: string;
-    verdict_statement: string;
-    domain_task: OncologyDomainTask;
-    dataset_id: string;
-    scopeTested: string[];
-    scopeNotTested: string[];
-    universalClaimLimit: string;
-    evidenceLinks: Record<string, unknown>;
-    tool_invocations: number;
-    license_status: 'PASSED' | 'BLOCKED';
-    baseline_margin?: number;
-    leakage_summary?: string;
-    author_responses?: AuthorResponse[];
-    provenance?: string;
-    synthetic?: boolean;
-  }
+  entry: Record<string, unknown>
 ): string {
+  // Hash everything except the stored digest itself, so every field (including
+  // raw_audit_results, verdict_id, and any future field) is tamper-evident.
+  const { sha256_hash, block_height, previous_block_hash, ...rest } = entry;
   const blockPayload = {
     block_height: blockHeight,
     previous_block_hash: previousBlockHash,
-    claim_id: entry.claim_id,
-    timestamp: entry.timestamp,
-    verdict: entry.verdict,
-    title: entry.title,
-    verdict_statement: entry.verdict_statement,
-    domain_task: entry.domain_task,
-    dataset_id: entry.dataset_id,
-    scopeTested: entry.scopeTested,
-    scopeNotTested: entry.scopeNotTested,
-    universalClaimLimit: entry.universalClaimLimit,
-    evidenceLinks: entry.evidenceLinks,
-    tool_invocations: entry.tool_invocations,
-    license_status: entry.license_status,
-    baseline_margin: entry.baseline_margin ?? null,
-    leakage_summary: entry.leakage_summary ?? null,
-    author_responses: entry.author_responses ?? [],
-    provenance: entry.provenance ?? 'computed',
-    synthetic: entry.synthetic ?? false,
+    ...rest,
   };
   return syncHash(canonicalJson(blockPayload));
 }
 
-export type SystemStatus = 'RUNNING' | 'PAUSED' | 'STOPPED';
+export type { SystemStatus } from './types';
+import type { SystemStatus } from './types';
 let systemStatus: SystemStatus = 'STOPPED';
 
 export function getSystemStatus(): SystemStatus {
@@ -90,12 +62,46 @@ export function setSystemStatus(status: SystemStatus): void {
   systemStatus = status;
 }
 
+function isResponseBlock(r: Record<string, unknown>): boolean {
+  return r?.type === 'author_response';
+}
+
+function dedupeResponses(list: AuthorResponse[]): AuthorResponse[] {
+  const seen = new Set<string>();
+  const out: AuthorResponse[] = [];
+  for (const r of list) {
+    if (seen.has(r.response_id)) continue;
+    seen.add(r.response_id);
+    out.push(r);
+  }
+  return out;
+}
+
 export function getLedgerRecords(): VerdictRecord[] {
-  return ledgerStore.getAll();
+  const all = ledgerStore.getAll() as Array<Record<string, unknown>>;
+  const verdicts = all.filter((r) => !isResponseBlock(r));
+  const responsesByVerdict = new Map<string, AuthorResponse[]>();
+  for (const r of all) {
+    if (!isResponseBlock(r)) continue;
+    const vId = r.verdict_id as string | undefined;
+    const resp = r.response as AuthorResponse | undefined;
+    if (vId && resp) {
+      const list = responsesByVerdict.get(vId) ?? [];
+      list.push(resp);
+      responsesByVerdict.set(vId, list);
+    }
+  }
+  return verdicts.map((v) => ({
+    ...(v as object),
+    author_responses: dedupeResponses([
+      ...((v.author_responses as AuthorResponse[] | undefined) ?? []),
+      ...(responsesByVerdict.get(v.verdict_id as string) ?? []),
+    ]),
+  })) as VerdictRecord[];
 }
 
 export function getLedgerRecordById(verdictId: string): VerdictRecord | undefined {
-  return ledgerStore.getAll().find((r) => r.verdict_id === verdictId);
+  return getLedgerRecords().find((r) => r.verdict_id === verdictId);
 }
 
 export function resetLedger(initialRecords: VerdictRecord[] = []): void {
@@ -121,6 +127,15 @@ export function writeVerdictToLedger(
     );
   }
 
+  // A "computed" verdict must be anchored to a real referee-core report hash.
+  // Without it, the ledger could record a measurement that no engine produced.
+  if (recordInput.provenance === 'computed' && !recordInput.report_sha256) {
+    throw new Error(
+      `Cannot commit a computed verdict without an engine report hash (report_sha256). ` +
+      `Only deterministic referee-core results may be anchored as computed.`
+    );
+  }
+
   const records = ledgerStore.getAll();
   const previousBlock = records[records.length - 1];
   const previousHash = previousBlock
@@ -131,6 +146,7 @@ export function writeVerdictToLedger(
 
   const blockHash = computeBlockHash(blockHeight, previousHash, {
     ...recordInput,
+    verdict_id: verdictId,
     author_responses: recordInput.author_responses || [],
     provenance: recordInput.provenance || 'computed',
     synthetic: false,
@@ -178,19 +194,23 @@ export function addAuthorResponseToRecord(
     rebuttal_artifact_url: rebuttalUrl,
   };
 
-  if (!record.author_responses) {
-    record.author_responses = [];
-  }
-  record.author_responses.push(response);
+  const previousBlock = records[records.length - 1];
+  const previousHash = previousBlock
+    ? previousBlock.sha256_hash
+    : '0000000000000000000000000000000000000000000000000000000000000000';
+  const blockHeight = records.length + 1;
 
-  // Update record hash after author response append
-  record.sha256_hash = computeBlockHash(record.block_height, record.previous_block_hash, record);
+  const responseBlock = {
+    type: 'author_response',
+    verdict_id: verdictId,
+    response,
+    block_height: blockHeight,
+    previous_block_hash: previousHash,
+    sha256_hash: '', // filled below
+  };
+  responseBlock.sha256_hash = computeBlockHash(blockHeight, previousHash, responseBlock);
 
-  // Re-persist updated records list
-  ledgerStore.reset();
-  for (const r of records) {
-    ledgerStore.append(r);
-  }
+  ledgerStore.append(responseBlock as unknown as VerdictRecord);
 
   return response;
 }

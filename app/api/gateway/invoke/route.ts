@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 // import { apiGatewayClient } from '@/lib/integrations/aws';
 // import { InvokeCommand } from '@aws-sdk/client-api-gateway';
 
+/**
+ * POST /api/gateway/invoke
+ *
+ * Not implemented. This route used to answer `200 {"response": "API Gateway
+ * invocation stubbed"}`, which told a caller that a gateway call had happened
+ * when nothing was invoked. It now answers 501 so the gap is visible.
+ */
 export async function POST(req: Request) {
-  const { action, payload } = await req.json();
+  const guard = await requireOperator(req);
+  if (guard) return guard;
 
-  // const command = new InvokeCommand({
-  //   restApiId: process.env.API_GATEWAY_ID,
-  //   resourceId: process.env.API_GATEWAY_RESOURCE_ID,
-  //   httpMethod: 'POST',
-  //   pathWithQueryString: `/execute_skill?action=${action}`,
-  //   body: JSON.stringify(payload),
-  // });
-
-  try {
-    // const response = await apiGatewayClient.send(command);
-    return NextResponse.json({ response: 'API Gateway invocation stubbed' });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to invoke API Gateway' }, { status: 500 });
-  }
+  return NextResponse.json(
+    {
+      error: 'not_implemented',
+      detail:
+        'API Gateway invocation is not wired up. The previous implementation returned a stubbed success response.',
+    },
+    { status: 501 }
+  );
 }

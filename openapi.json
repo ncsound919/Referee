@@ -1,0 +1,476 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "referee-core",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit": {
+      "post": {
+        "summary": "Audit",
+        "operationId": "audit_audit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Audit Audit Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify": {
+      "post": {
+        "summary": "Verify",
+        "operationId": "verify_verify_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Verify Verify Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pre_check": {
+      "post": {
+        "summary": "Pre Check Hypothesis",
+        "operationId": "pre_check_hypothesis_pre_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HypothesisPreCheck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/run_experiment": {
+      "post": {
+        "summary": "Run Experiment",
+        "operationId": "run_experiment_run_experiment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunExperimentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuditRequest": {
+        "properties": {
+          "claim": {
+            "$ref": "#/components/schemas/ClaimSpec"
+          },
+          "csv_text": {
+            "type": "string",
+            "title": "Csv Text"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Policy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "claim",
+          "csv_text"
+        ],
+        "title": "AuditRequest"
+      },
+      "ClaimSpec": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Claim Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "claimed_auc": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Claimed Auc"
+          },
+          "claimed_auc_ci": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed Auc Ci"
+          },
+          "eval_on": {
+            "type": "string",
+            "enum": [
+              "test",
+              "all"
+            ],
+            "title": "Eval On",
+            "default": "test"
+          },
+          "score_is_probability": {
+            "type": "boolean",
+            "title": "Score Is Probability",
+            "default": false
+          },
+          "split_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "claimed_auc"
+        ],
+        "title": "ClaimSpec"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HypothesisPreCheck": {
+        "properties": {
+          "dataset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dataset Ids"
+          },
+          "user_role": {
+            "type": "string",
+            "title": "User Role"
+          },
+          "pipeline_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pipeline Skills"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_ids",
+          "user_role",
+          "pipeline_skills"
+        ],
+        "title": "HypothesisPreCheck"
+      },
+      "Policy": {
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "title": "Seed",
+            "default": 42
+          },
+          "n_boot": {
+            "type": "integer",
+            "minimum": 100.0,
+            "title": "N Boot",
+            "default": 1000
+          },
+          "n_perm": {
+            "type": "integer",
+            "minimum": 99.0,
+            "title": "N Perm",
+            "default": 999
+          },
+          "ci_level": {
+            "type": "number",
+            "title": "Ci Level",
+            "default": 0.95
+          },
+          "nc_seed_offset": {
+            "type": "integer",
+            "title": "Nc Seed Offset",
+            "default": 1
+          },
+          "repro_tolerance": {
+            "type": "number",
+            "title": "Repro Tolerance",
+            "default": 0.02
+          },
+          "min_eval_patients": {
+            "type": "integer",
+            "title": "Min Eval Patients",
+            "default": 30
+          },
+          "min_patients_per_class": {
+            "type": "integer",
+            "title": "Min Patients Per Class",
+            "default": 10
+          },
+          "max_degenerate_frac": {
+            "type": "number",
+            "title": "Max Degenerate Frac",
+            "default": 0.05
+          },
+          "nuisance_warn_auc": {
+            "type": "number",
+            "title": "Nuisance Warn Auc",
+            "default": 0.65
+          },
+          "shortcut_ratio": {
+            "type": "number",
+            "title": "Shortcut Ratio",
+            "default": 0.9
+          },
+          "nc_ci_level": {
+            "type": "number",
+            "title": "Nc Ci Level",
+            "default": 0.99
+          },
+          "nc_margin": {
+            "type": "number",
+            "title": "Nc Margin",
+            "default": 0.05
+          },
+          "train_label": {
+            "type": "string",
+            "title": "Train Label",
+            "default": "train"
+          },
+          "test_label": {
+            "type": "string",
+            "title": "Test Label",
+            "default": "test"
+          },
+          "split_aliases": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Split Aliases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Policy",
+        "description": "Thresholds. Defaults are proposals; they are hashed into every report."
+      },
+      "RunExperimentRequest": {
+        "properties": {
+          "engine_name": {
+            "type": "string",
+            "title": "Engine Name"
+          },
+          "snapshot_json": {
+            "type": "string",
+            "title": "Snapshot Json"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "type": "object",
+        "required": [
+          "engine_name",
+          "snapshot_json",
+          "sha256"
+        ],
+        "title": "RunExperimentRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

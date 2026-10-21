@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { mistralClient } from '@/lib/integrations/mistral';
+import { requireOperator } from '@/lib/internal-auth';
 
 const PINNED_MODEL = 'mistral-large-latest';
 const MAX_PROMPT_LENGTH = 4000;
 
 export async function POST(req: Request) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
   try {
     const { prompt } = await req.json();
 

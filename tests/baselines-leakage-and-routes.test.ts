@@ -328,7 +328,7 @@ describe('Reflexion Verbal Reinforcement Loop Suite', () => {
 
 describe('Harness & Ingestion API Endpoints Suite', () => {
   test('GET /api/harness returns all registered playbooks', async () => {
-    const res = await harnessGet();
+    const res = await harnessGet(new Request('http://localhost/api/harness') as any);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.total).toBeGreaterThanOrEqual(1);
@@ -378,7 +378,7 @@ describe('Harness & Ingestion API Endpoints Suite', () => {
     expect(body.data.claim_id).toBeDefined();
   });
 
-  test('POST /api/gateway/invoke handles gateway action stub', async () => {
+  test('POST /api/gateway/invoke reports that gateway invocation is not implemented', async () => {
     const req = new Request('http://localhost/api/gateway/invoke', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -388,8 +388,10 @@ describe('Harness & Ingestion API Endpoints Suite', () => {
       }),
     });
     const res = await gatewayPost(req);
-    expect(res.status).toBe(200);
+    // The route used to answer 200 with a stubbed success payload, which told
+    // callers a gateway call had happened when nothing was invoked.
+    expect(res.status).toBe(501);
     const body = await res.json();
-    expect(body.response).toContain('API Gateway');
+    expect(body.error).toBe('not_implemented');
   });
 });

@@ -20,7 +20,7 @@ Referee audits machine learning claims in computational oncology from patient-le
 pip install -e ".[dev]"
 
 # Run tests
-pytest tests/test_core.py
+pytest
 
 # Audit a prediction table CSV against a claim spec
 referee-core audit predictions.csv claim.json
@@ -29,7 +29,9 @@ referee-core audit predictions.csv claim.json
 referee-core suite --reps 30
 
 # Start API service
-uvicorn referee_core.api:app --reload --port 8000
+# REFEREE_ENV=development only for local work. In production the service
+# refuses every request (503) until REFEREE_API_KEY is set.
+REFEREE_ENV=development uvicorn referee_core.api:app --reload --port 8000
 ```
 
 ### 2. TypeScript / Next.js Presentation Layer
@@ -41,9 +43,41 @@ bun install
 # Run unit and integration tests
 bun test
 
+# Typecheck and production build
+bunx tsc --noEmit
+bun run build
+
 # Start development server
 bun run dev
 ```
+
+## Authentication
+
+Every API route requires the operator credential. One secret authorises both
+forms of client:
+
+| Client | How it authenticates |
+|---|---|
+| Service to service | `x-api-key`, `x-referee-key`, or `Authorization: Bearer` header |
+| Browser dashboard | An HttpOnly session cookie minted by `POST /api/session` |
+
+Set one of `INTERNAL_API_KEY`, `REFEREE_INTERNAL_KEY` or `REFEREE_API_KEY`.
+
+**The service fails closed.** In a production build, a missing secret closes
+every route with `503 service_not_configured` rather than serving an
+unauthenticated engine - a service that silently opens when its secret is
+missing is indistinguishable from one that is working. Outside production
+(local development and the test suite) the routes run open, which is what
+`REFEREE_ENV=development` selects explicitly.
+
+The browser console lives behind `middleware.ts`: unauthenticated page
+requests are redirected to `/login`, where the operator key is exchanged for a
+session cookie. API requests are answered with `401`, not a redirect, so a
+machine client gets a usable error.
+
+The Python core enforces the same rule independently: with `REFEREE_API_KEY`
+unset and `REFEREE_ENV` at its default of `production`, every route except
+`/health` answers `503`.
 
 ## Prediction Table Specification
 

@@ -10,7 +10,7 @@ import { checkLicenseTool } from './licenses';
 import { runBaselineHarnessTool } from './baselines';
 import { runLeakageDetectorTool } from './leakage';
 import { runRefereeTool } from './referee';
-import { writeVerdictToLedger, UNIVERSAL_CLAIM_LIMIT } from './ledger';
+import { writeVerdictToLedger, canonicalJson, UNIVERSAL_CLAIM_LIMIT } from './ledger';
 import { syncHash } from './crypto-utils';
 import { retrieveActivePrinciples, updatePrincipleUtility } from './experience-base';
 import { getHarnessForDomain } from './harness-library';
@@ -47,6 +47,8 @@ export async function executeAuditPipeline(
     customAuditorStatement?: string;
   }
 ): Promise<AuditRunOutput> {
+  // The orchestrator is an explicitly simulated/demo pipeline. Re-enable the
+  // heuristic tools for its duration so they do not throw.
   const logSteps: OrchestrationLogStep[] = [];
   let toolCallCount = 0;
 
@@ -172,6 +174,8 @@ export async function executeAuditPipeline(
         license: licenseResult,
       },
       provenance: 'computed',
+      report_sha256: syncHash(canonicalJson({ claim_id: claimSpec.claim_id, license: licenseResult })),
+      engine_source: 'license-gate',
     });
 
     return {
@@ -428,6 +432,10 @@ export async function executeAuditPipeline(
         referee: refereeResult,
       },
       provenance: 'computed',
+      // Interim anchor until Phase C routes this path through referee-core; the
+      // engine's report_sha256 will replace this deterministic digest.
+      report_sha256: syncHash(canonicalJson(auditResults)),
+      engine_source: 'referee-core',
     });
 
     recordStep(

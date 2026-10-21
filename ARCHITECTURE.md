@@ -8,6 +8,10 @@ Referee is designed around a strict mathematical principle: **every number is co
 +--------------------------------------------------------------------------+
 |                            USER / WEB CLIENT                             |
 |           Submits Prediction CSV + Clinical Claim Specification          |
+|                                                                          |
+|   The browser dashboard holds no engine, no ledger and no credential.    |
+|   It authenticates with an operator session cookie and then talks to    |
+|   the API below; it never executes an audit locally.                    |
 +--------------------------------------------------------------------------+
                                      |
                                      v
@@ -18,6 +22,8 @@ Referee is designed around a strict mathematical principle: **every number is co
 |    Every metric carries provenance: 'computed' | 'reference' | 'simulated'|
 |  - Simulated Demo Banner on any unverified synthetic visualization      |
 |  - Strict Ledger Gate: Simulated results CANNOT be committed to ledger    |
+|  - Operator authentication on every route (API key or session cookie)    |
+|    and fail-closed behaviour when no secret is configured                |
 +--------------------------------------------------------------------------+
                                      |
                                      | HTTP POST /audit (Prediction CSV)
@@ -58,8 +64,26 @@ Referee is designed around a strict mathematical principle: **every number is co
 |  - verifyLedgerChain() recomputes every block hash and rejects edits     |
 |  - Real ledger starts clean (empty); historical fixtures isolated        |
 |  - Author responses cryptographically hashed and chained to verdicts     |
+|  - Server-side only: the ledger store (SQLite) is never shipped to the  |
+|    browser, and the browser never writes to it directly                 |
 +--------------------------------------------------------------------------+
 ```
+
+## Credential Boundary
+
+There is exactly one operator secret. It authorises three kinds of client:
+
+| Caller | Credential | Where it is checked |
+|---|---|---|
+| Service to service (e.g. the Concordance website) | `x-api-key` / `x-referee-key` / `Authorization: Bearer` | `lib/internal-auth.ts` (`requireOperator`) and `referee_core/api.py` (`_RefereeKeyMiddleware`) |
+| Browser dashboard | HttpOnly session cookie | `middleware.ts` for pages, `requireOperator` for API calls |
+| Health probe | none | `/api/health` and `/health` only |
+
+Both the TypeScript layer and the Python core fail closed: in a production
+build with no secret configured they answer `503` rather than serving an
+unauthenticated engine. Development mode (`REFEREE_ENV=development`, or a
+non-production `NODE_ENV` for the web layer) is the only way to run open, and
+it has to be selected deliberately.
 
 ## Provenance Taxonomy
 

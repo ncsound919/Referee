@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import io
-from typing import Literal, Optional
+from typing import Literal
 
-import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -23,13 +22,13 @@ class ClaimSpec(BaseModel):
     claim_id: str = Field(min_length=1)
     title: str = ""
     claimed_auc: float = Field(gt=0.0, le=1.0)
-    claimed_auc_ci: Optional[tuple[float, float]] = None
+    claimed_auc_ci: tuple[float, float] | None = None
     eval_on: Literal["test", "all"] = "test"
     score_is_probability: bool = False
-    split_description: Optional[str] = None   # advisory text only; never changes a verdict
+    split_description: str | None = None   # advisory text only; never changes a verdict
 
     @model_validator(mode="after")
-    def _ci(self) -> "ClaimSpec":
+    def _ci(self) -> ClaimSpec:
         if self.claimed_auc_ci and not (self.claimed_auc_ci[0] <= self.claimed_auc <= self.claimed_auc_ci[1]):
             raise ValueError("claimed_auc must lie inside claimed_auc_ci")
         return self

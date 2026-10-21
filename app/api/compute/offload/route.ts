@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { offloadToCloudflareWorker, runKaggleKernel, verifyComputeSystems } from '@/lib/integrations/offload';
+import { requireOperator } from '@/lib/internal-auth';
 
 const ALLOWED_TARGETS = new Set(['tumortwin', 'cloudflare', 'kaggle']);
 
@@ -8,7 +9,10 @@ const ALLOWED_TARGETS = new Set(['tumortwin', 'cloudflare', 'kaggle']);
  * Return connection and verification status of all compute backends
  * (Cloudflare Workers/AI/R2, Kaggle multi-account cluster, etc.)
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const status = await verifyComputeSystems();
     return NextResponse.json({ status: 'ok', backends: status });
@@ -23,6 +27,8 @@ export async function GET() {
  * Offload compute workloads to TumorTwin, Cloudflare, or Kaggle
  */
 export async function POST(req: Request) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
   try {
     const { target, task } = await req.json();
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -44,7 +43,7 @@ def patient_overlap(df: pd.DataFrame, policy: Policy) -> dict:
             "shared_sample_ids": len(dup_samples)}
 
 
-def _covariate_auc(df_eval: pd.DataFrame, df_train: Optional[pd.DataFrame], col: str) -> tuple[float, str]:
+def _covariate_auc(df_eval: pd.DataFrame, df_train: pd.DataFrame | None, col: str) -> tuple[float, str]:
     """AUC of a model that sees only the covariate. Fit on train rows when available."""
     enc = OneHotEncoder(handle_unknown="ignore")
     if df_train is not None and df_train["label"].nunique() == 2 and df_train[col].notna().any():
@@ -66,7 +65,7 @@ def _covariate_auc(df_eval: pd.DataFrame, df_train: Optional[pd.DataFrame], col:
     return auc(y, oof), "grouped cross-validation on evaluation rows (no labelled train rows)"
 
 
-def nuisance_checks(df: pd.DataFrame, df_eval: pd.DataFrame, model_auc: Optional[float],
+def nuisance_checks(df: pd.DataFrame, df_eval: pd.DataFrame, model_auc: float | None,
                     policy: Policy) -> list[dict]:
     out = []
     train = df[df["split"] == policy.train_label] if "split" in df.columns else None
@@ -101,7 +100,7 @@ def nuisance_checks(df: pd.DataFrame, df_eval: pd.DataFrame, model_auc: Optional
     return out
 
 
-def advisories(split_description: Optional[str]) -> list[str]:
+def advisories(split_description: str | None) -> list[str]:
     if not split_description:
         return []
     return [msg for pat, msg in ADVISORY_PATTERNS if re.search(pat, split_description, re.I)]

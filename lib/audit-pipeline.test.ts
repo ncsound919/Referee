@@ -110,6 +110,7 @@ test('Layer 4 Ledger: Cryptographic SHA-256 block hash chaining and tamper-evide
     author_responses: [],
     raw_audit_results: {},
     provenance: 'computed',
+    report_sha256: 'a'.repeat(64),
   });
 
   assert.equal(newBlock.block_height, 1);
@@ -162,4 +163,30 @@ test('Layer 2 Orchestrator: Rule 2 terminates immediately when license is blocke
   assert.equal(output.toolCallCount, 1); // Stopped after checkLicenseTool
   assert.ok(output.verdictRecord);
   assert.equal(output.verdictRecord.verdict, 'OUT_OF_SCOPE');
+});
+
+test('Ledger refuses computed verdict without engine report hash', () => {
+  assert.throws(
+    () => {
+      writeVerdictToLedger({
+        claim_id: 'no_hash_claim',
+        timestamp: new Date().toISOString(),
+        verdict: 'REPRODUCED',
+        title: 'No hash',
+        verdict_statement: 'No hash.',
+        domain_task: 'breast_transcriptomic_metastasis',
+        dataset_id: 'METABRIC',
+        scopeTested: ['License'],
+        scopeNotTested: [],
+        universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
+        evidenceLinks: { claimSpecHash: 'h', auditResultsHash: 'a', ledgerRecordHash: '', datasetId: 'M', repositorySnapshot: '', rawLogUrl: '' },
+        tool_invocations: 1,
+        license_status: 'PASSED',
+        author_responses: [],
+        raw_audit_results: {},
+        provenance: 'computed',
+      });
+    },
+    /engine report hash/
+  );
 });

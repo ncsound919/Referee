@@ -32,3 +32,10 @@ Thumbs.db
 
 # Studio temporary screenshots/artifacts
 .aistudio/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.lock.hcl

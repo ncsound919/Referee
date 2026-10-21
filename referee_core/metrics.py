@@ -58,7 +58,7 @@ def cluster_bootstrap_auc(df: pd.DataFrame, score_col: str, n_boot: int, seed: i
     tail = 100 * (1 - ci_level) / 2
     lo, hi = np.percentile(vals, [tail, 100 - tail])
     return {"status": "ok", "estimate": point, "ci_low": float(lo), "ci_high": float(hi),
-            "n_patients": P, "n_samples": int(len(y)), "n_pos": int((y == 1).sum()),
+            "n_patients": P, "n_samples": len(y), "n_pos": int((y == 1).sum()),
             "n_neg": int((y == 0).sum()), "n_boot": n_boot, "seed": seed, "ci_level": ci_level,
             "degenerate_resamples": degenerate}
 
@@ -76,13 +76,14 @@ def calibration(y: np.ndarray, p: np.ndarray) -> dict:
     if np.ptp(lp) < 1e-9:
         return refused("scores are constant")
     lr = LogisticRegression(C=1e6, max_iter=1000).fit(lp.reshape(-1, 1), y)
-    f = lambda a: expit(a + lp).sum() - y.sum()
+    def f(a: float) -> float:
+        return float(expit(a + lp).sum() - y.sum())
     try:
         a = brentq(f, -20, 20)
     except ValueError:
         return refused("intercept-in-the-large did not converge")
     return {"status": "ok", "slope": float(lr.coef_[0, 0]), "intercept_in_the_large": float(a),
-            "brier": float(np.mean((p - y) ** 2)), "n": int(len(y))}
+            "brier": float(np.mean((p - y) ** 2)), "n": len(y)}
 
 
 def permutation_null(df: pd.DataFrame, score_col: str, n_perm: int, seed: int) -> dict:
@@ -100,7 +101,7 @@ def permutation_null(df: pd.DataFrame, score_col: str, n_perm: int, seed: int) -
     for _ in range(n_perm):
         perm = rng.permutation(plabel)
         yp = np.empty_like(y)
-        for lab, g_ in zip(perm, groups):
+        for lab, g_ in zip(perm, groups, strict=True):
             yp[g_] = lab
         if yp.min() == yp.max():
             continue

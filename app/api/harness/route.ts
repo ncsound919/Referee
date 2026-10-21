@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import { getHarnessEntries, runHeldOutHarnessValidation } from '@/lib/harness-library';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   const harnesses = getHarnessEntries();
   return NextResponse.json({
     total: harnesses.length,
@@ -10,6 +14,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const body = await req.json();
     const { action, harness_id } = body;

@@ -1,9 +1,8 @@
 """Seeded-fault suite (M9): synthetic pipelines with known flaws and known-good controls."""
 from __future__ import annotations
 
-import io
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -28,10 +27,10 @@ def _base(rng, n_pat=400, reps=1, d=1.2, batch_effect=0.0, batch_label_corr=0.0)
     rows = []
     for p in range(n_pat):
         for r in range(reps):
-            rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_{r}", label=int(y_p[p]),
-                             split="test" if is_test[p] else "train", batch=batch_p[p],
-                             score=rng.normal(d * y_p[p], 1.0)
-                             + batch_effect * (batch_p[p] == "B1")))
+            rows.append({"patient_id": f"P{p}", "sample_id": f"P{p}_{r}", "label": int(y_p[p]),
+                             "split": "test" if is_test[p] else "train", "batch": batch_p[p],
+                             "score": rng.normal(d * y_p[p], 1.0)
+                             + batch_effect * (batch_p[p] == "B1")})
     return pd.DataFrame(rows)
 
 
@@ -83,8 +82,8 @@ def _patient_leak(rng):
     for p in range(n_pat):
         for r in range(4):
             split = "test" if rng.random() < 0.4 else "train"   # sample-level random split
-            rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_{r}", label=int(y_p[p]), split=split,
-                             score=effect[p] * (2 * y_p[p] - 1) + rng.normal(0, 0.6)))
+            rows.append({"patient_id": f"P{p}", "sample_id": f"P{p}_{r}", "label": int(y_p[p]), "split": split,
+                             "score": effect[p] * (2 * y_p[p] - 1) + rng.normal(0, 0.6)})
     df = pd.DataFrame(rows)
     return _csv(df), _claim(df, "patient_leak")
 

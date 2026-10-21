@@ -89,7 +89,7 @@ describe('Autonomous Self-Running & Progressive Experimentation System', () => {
   });
 
   test('GET /api/autonomous/run returns telemetry status', async () => {
-    const res = await autoGet();
+    const res = await autoGet(new Request('http://localhost/api/autonomous/run') as any);
     expect(res.status).toBe(200);
 
     const body = await res.json();

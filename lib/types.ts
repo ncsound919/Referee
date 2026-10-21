@@ -185,6 +185,8 @@ export interface VerdictRecord {
   block_height: number;
   previous_block_hash: string;
   sha256_hash: string;
+  /** Python referee-core decision hash (when anchored to an engine report). */
+  decision_sha256?: string;
   verdict: VerdictType;
   title: string;
   verdict_statement: string;
@@ -214,6 +216,12 @@ export interface VerdictRecord {
   };
   provenance?: Provenance;
   synthetic?: boolean;
+  /** SHA-256 of the referee-core report this verdict was anchored to. Required for
+   *  provenance: 'computed' records so a ledger block can never claim a measurement
+   *  that no engine actually produced. */
+  report_sha256?: string;
+  /** Which component produced the numbers, e.g. 'referee-core' or 'license-gate'. */
+  engine_source?: string;
 }
 
 export interface RecursiveRepairIteration {
@@ -238,6 +246,15 @@ export interface RecursiveRepairIteration {
     pipelineHash?: string;
   };
 }
+
+/**
+ * State of the autonomous engine.
+ *
+ * Lives here rather than in `lib/ledger.ts` so that the browser dashboard can
+ * reference the type without importing the server-side ledger module (which
+ * pulls in `node:sqlite` and cannot be bundled for the client).
+ */
+export type SystemStatus = 'RUNNING' | 'PAUSED' | 'STOPPED';
 
 export interface OrchestrationLogStep {
   step_number: number;

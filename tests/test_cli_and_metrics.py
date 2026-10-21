@@ -12,16 +12,13 @@ from __future__ import annotations
 
 import io
 import json
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from referee_core import cli, leakage, metrics
-from referee_core.schema import ClaimSpec, Policy
-
+from referee_core.schema import Policy
 
 # ---------------------------------------------------------------------------
 # Helpers

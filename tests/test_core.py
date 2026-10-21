@@ -1,5 +1,3 @@
-import io
-import json
 
 import numpy as np
 import pandas as pd
@@ -22,8 +20,8 @@ def table(n_pat=200, d=1.2, seed=0, reps=1, leak=False):
     for p in range(n_pat):
         for r in range(reps):
             split = ("test" if (rng.random() < 0.4) else "train") if leak else ("test" if test[p] else "train")
-            rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_{r}", label=int(y[p]), split=split,
-                             score=rng.normal(d * y[p], 1)))
+            rows.append({"patient_id": f"P{p}", "sample_id": f"P{p}_{r}", "label": int(y[p]), "split": split,
+                             "score": rng.normal(d * y[p], 1)})
     return pd.DataFrame(rows)
 
 
@@ -56,7 +54,7 @@ def test_cluster_bootstrap_is_wider_than_naive_when_samples_cluster():
     n_pat, reps = 60, 8
     y_p = (rng.random(n_pat) < 0.5).astype(int)
     eff = rng.normal(0, 1, n_pat)
-    rows = [dict(patient_id=f"p{p}", label=int(y_p[p]), score=eff[p] + 0.8 * y_p[p] + rng.normal(0, 0.3))
+    rows = [{"patient_id": f"p{p}", "label": int(y_p[p]), "score": eff[p] + 0.8 * y_p[p] + rng.normal(0, 0.3)}
             for p in range(n_pat) for _ in range(reps)]
     df = pd.DataFrame(rows)
     clustered = metrics.cluster_bootstrap_auc(df, "score", 400, 1)
@@ -257,11 +255,10 @@ def test_split_aliases_and_case_normalization():
 def test_underpowered_table_with_leak_reports_leak_in_reasons():
     """Finding B6: Leaky + underpowered tables must report the critical leakage finding in reasons."""
     # Underpowered: only 5 patients
-    rng = np.random.default_rng(42)
     rows = []
     for p in range(5):
-        rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_tr", label=p % 2, split="train", score=0.6))
-        rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_te", label=p % 2, split="test", score=0.7))
+        rows.append({"patient_id": f"P{p}", "sample_id": f"P{p}_tr", "label": p % 2, "split": "train", "score": 0.6})
+        rows.append({"patient_id": f"P{p}", "sample_id": f"P{p}_te", "label": p % 2, "split": "test", "score": 0.7})
     df = pd.DataFrame(rows)
     csv = df.to_csv(index=False)
     r = audit_csv(csv, ClaimSpec(claim_id="tiny_leaky", claimed_auc=0.70))
@@ -285,7 +282,6 @@ def test_claimed_ci_disjoint_causes_non_reproduction():
     """Finding B9: Wildly inconsistent claimed CIs must cause NOT_REPRODUCED."""
     df = table(200)
     csv = df.to_csv(index=False)
-    honest = claim_for(df)
     # Claim high AUC with extremely tight, disjoint interval [0.95, 0.99]
     disjoint_claim = ClaimSpec(
         claim_id="c_disjoint",

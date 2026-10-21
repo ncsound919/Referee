@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import { getLedgerRecords } from '@/lib/ledger';
 
 /**
@@ -13,9 +14,12 @@ import { getLedgerRecords } from '@/lib/ledger';
  *   404 { error }                     — no records for this claim_id
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ claim_id: string }> }
 ) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   const { claim_id } = await params;
 
   if (!claim_id || claim_id.trim().length === 0) {

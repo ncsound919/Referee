@@ -27,12 +27,18 @@ export interface CoreAuditRequest {
 
 export interface CoreAuditResponse {
   verdict: string;
-  verdict_statement: string;
+  reasons?: string[];
   dimensions: Record<string, string>;
   evidence: Record<string, unknown>;
-  decision_sha256: string;
   input_sha256: string;
-  claim_id: string;
+  decision_sha256: string;
+  report_sha256?: string;
+  software?: { referee_core?: string; numpy?: string; scipy?: string; 'scikit-learn'?: string };
+  disposition?: string;
+  // verdict_statement / claim_id are derived by callers; the engine returns
+  // claim + policy + report_version at the top level (see openapi.json).
+  verdict_statement?: string;
+  claim_id?: string;
   [key: string]: unknown;
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import {
   getExperienceStore,
   retrieveActivePrinciples,
@@ -9,6 +10,9 @@ import {
 } from '@/lib/experience-base';
 
 export async function GET(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   const url = new URL(req.url);
   const domain = url.searchParams.get('domain');
 
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const body = await req.json();
     const action = body.action;

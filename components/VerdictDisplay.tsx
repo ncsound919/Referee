@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { VerdictRecord, VerdictType } from '@/lib/types';
+import { VerdictRecord, VerdictType, Principle } from '@/lib/types';
 import { LaymanSummaryCard } from './LaymanSummaryCard';
 import { NextExperimentSetupCard } from './NextExperimentSetupCard';
 import {
@@ -21,10 +21,12 @@ import {
 
 interface VerdictDisplayProps {
   record: VerdictRecord;
+  /** Active experience-base principles, loaded by the dashboard. */
+  principles?: Principle[];
   onNavigateToLedger?: () => void;
 }
 
-export function VerdictDisplay({ record, onNavigateToLedger }: VerdictDisplayProps) {
+export function VerdictDisplay({ record, principles, onNavigateToLedger }: VerdictDisplayProps) {
   const [copiedHash, setCopiedHash] = useState(false);
 
   const getVerdictTheme = (verdict: VerdictType) => {
@@ -133,6 +135,19 @@ export function VerdictDisplay({ record, onNavigateToLedger }: VerdictDisplayPro
               <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider font-mono bg-slate-950 border border-slate-800 text-slate-300">
                 {theme.badge}
               </span>
+              <span
+                className={`px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider font-mono border ${
+                  record.provenance === 'computed'
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                    : record.provenance === 'reference'
+                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                    : 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                }`}
+                title={record.engine_source ? `Source: ${record.engine_source}` : undefined}
+              >
+                {record.provenance || 'simulated'}
+                {record.report_sha256 ? ' · anchored' : ''}
+              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
               Ledger Block #{record.block_height} • Claim ID: {record.claim_id} • {new Date(record.timestamp).toUTCString()}
@@ -176,7 +191,7 @@ export function VerdictDisplay({ record, onNavigateToLedger }: VerdictDisplayPro
       <LaymanSummaryCard record={record} />
 
       {/* Next Experiment Setup System Driven by Self-Learning */}
-      <NextExperimentSetupCard record={record} />
+      <NextExperimentSetupCard record={record} principles={principles} />
 
       {/* Scope Tested vs Scope Not Tested Matrix */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

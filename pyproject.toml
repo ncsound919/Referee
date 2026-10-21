@@ -3,21 +3,49 @@ name = "referee-core"
 version = "0.1.0"
 description = "Deterministic measurement core for auditing computational oncology claims from prediction files"
 requires-python = ">=3.10"
-dependencies = ["numpy", "scipy", "pandas", "scikit-learn", "pydantic>=2", "fastapi>=0.110"]
+dependencies = ["numpy", "scipy", "pandas", "scikit-learn", "pydantic>=2", "fastapi>=0.110", "uvicorn[standard]>=0.27", "mangum>=0.17", "cryptography>=42", "typer>=0.12"]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx"]
+# ruff is part of the dev extra so that `pip install -e ".[dev]"` gives CI the
+# same linter the local gate uses. It is pinned to a minor series because ruff
+# changes its default rule set between releases and an unpinned linter would
+# make the CI gate fail on an unrelated ruff upgrade.
+dev = ["pytest", "httpx", "ruff>=0.17.1,<0.18"]
 
 [project.scripts]
 referee-core = "referee_core.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["referee_core*"]
+[tool.hatch.build.targets.wheel]
+packages = ["referee_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Explicit rule set so the CI gate is stable across ruff releases.
+select = [
+    "E4",   # pycodestyle: imports
+    "E7",   # pycodestyle: statements
+    "E9",   # pycodestyle: runtime/syntax errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "C4",   # comprehensions
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The test suite intentionally builds blind `except Exception` guards and
+# unused-looking fixtures around the deterministic engine.
+"tests/*" = ["B017", "B011"]
+

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import { generateHypothesis } from '@/lib/hypothesis/generation';
 import { runSkeptic } from '@/lib/hypothesis/skeptic';
 import { HypothesisRecord } from '@/lib/hypothesis/types';
@@ -7,11 +8,17 @@ import { calculateMEV } from '@/lib/mev';
 // In-memory tournament queue storage for preview
 const tournamentQueue: HypothesisRecord[] = [];
 
-export async function GET() {
+export async function GET(req: Request) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   return NextResponse.json({ queue: tournamentQueue });
 }
 
 export async function POST(req: Request) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const { gapDescription, domain, userRole, datasetIds } = await req.json();
 

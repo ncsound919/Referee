@@ -1,17 +1,42 @@
 """The audit: every verdict is computed from the table; text never changes it."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.metadata as md
 import json
-from typing import Optional
+import os
 
 import pandas as pd
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from . import leakage, metrics
+from . import baselines, leakage, metrics
 from .schema import UNIVERSAL_CLAIM_LIMIT, ClaimSpec, Policy, TableError, load_table
 
 VERDICTS = ["REPRODUCED", "NOT_REPRODUCED", "FAILS_BASELINE", "LEAKAGE_DETECTED", "UNVERIFIABLE", "OUT_OF_SCOPE"]
+
+
+def _signing_key() -> Ed25519PrivateKey:
+    raw = os.environ.get("REFEREE_SIGNING_KEY")
+    if raw:
+        seed = base64.b64decode(raw)
+        if len(seed) != 32:
+            raise ValueError("REFEREE_SIGNING_KEY must be a base64-encoded 32-byte seed")
+        return Ed25519PrivateKey.from_private_bytes(seed)
+    # Ephemeral dev key (not stable across restarts) — production must set REFEREE_SIGNING_KEY.
+    return Ed25519PrivateKey.generate()
+
+
+_SIGNING_KEY = _signing_key()
+
+
+def sign_digest(digest_hex: str) -> tuple[str, str]:
+    sig = _SIGNING_KEY.sign(bytes.fromhex(digest_hex))
+    pub = _SIGNING_KEY.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+    )
+    return base64.b64encode(sig).decode(), base64.b64encode(pub).decode()
 
 
 def _round_floats(obj, precision: int = 6):
@@ -26,7 +51,7 @@ def _round_floats(obj, precision: int = 6):
 
 def canonical(obj) -> str:
     """Canonical JSON with float rounding to fixed precision to prevent BLAS/compiler jitter."""
-    return json.dumps(_round_floats(obj), sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps(_round_floats(obj), sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
 
 
 def _normalize_split_val(val: str, policy: Policy) -> str:
@@ -43,7 +68,7 @@ def _eval_rows(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> pd.DataFra
     return df
 
 
-def audit_csv(csv_text: str, claim: ClaimSpec, policy: Optional[Policy] = None) -> dict:
+def audit_csv(csv_text: str, claim: ClaimSpec, policy: Policy | None = None) -> dict:
     policy = policy or Policy()
     input_sha = hashlib.sha256(csv_text.encode()).hexdigest()
     try:
@@ -54,9 +79,7 @@ def audit_csv(csv_text: str, claim: ClaimSpec, policy: Optional[Policy] = None) 
 
 
 def _unverifiable(reasons: list[str], **extra) -> dict:
-    dims = {k: "not_assessed" for k in
-            ("reproducibility", "baseline_comparison", "data_integrity", "statistical_adequacy",
-             "negative_control", "calibration")}
+    dims = dict.fromkeys(("reproducibility", "baseline_comparison", "data_integrity", "statistical_adequacy", "negative_control", "calibration"), "not_assessed")
     return {"verdict": "UNVERIFIABLE", "reasons": reasons, "dimensions": dims, "evidence": {}, **extra}
 
 
@@ -144,12 +167,18 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         dims["data_integrity"] = "not_assessable"
     elif critical:
         dims["data_integrity"] = "critical"
-    elif claim.eval_on == "all" and (df["split"] == policy.train_label).sum() > 0:
-        dims["data_integrity"] = "warning"
-    elif any(n["status"] == "warning" for n in nuis):
+    elif (claim.eval_on == "all" and (df["split"] == policy.train_label).sum() > 0) or any(n["status"] == "warning" for n in nuis):
         dims["data_integrity"] = "warning"
     else:
         dims["data_integrity"] = "passed"
+
+    # --- baseline comparison (only when feature columns are present) ---
+    base_res = baselines.run_baselines(df, policy.train_label, policy.test_label)
+    evidence["baseline_comparison"] = base_res
+    if base_res.get("status") == "assessed":
+        dims["baseline_comparison"] = "assessed"
+    else:
+        dims["baseline_comparison"] = "not_assessed"
 
     # --- negative control ---
     if "nc_score" in ev.columns and ev["nc_score"].notna().any():
@@ -197,6 +226,11 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         verdict = "UNVERIFIABLE"
     elif critical:
         verdict = "LEAKAGE_DETECTED"
+    elif dims.get("baseline_comparison") == "assessed" and claim.claimed_auc <= evidence["baseline_comparison"].get("best_test_auc", 1.0):
+        verdict = "FAILS_BASELINE"
+        reasons.append(f"claimed AUC {claim.claimed_auc:.3f} does not beat the best baseline "
+                       f"({evidence['baseline_comparison'].get('best_model')}, "
+                       f"AUC {evidence['baseline_comparison'].get('best_test_auc'):.3f})")
     elif dims["reproducibility"] == "not_reproduced":
         verdict = "NOT_REPRODUCED"
         reasons.append(f"claimed AUC {claim.claimed_auc:.3f} exceeds the reproduced {policy.ci_level:.0%} interval "
@@ -254,13 +288,35 @@ def _finish(claim: ClaimSpec, policy: Policy, input_sha: str, body: dict) -> dic
                               "a REPRODUCED verdict does not mean the model beats a baseline."),
     }
     report["report_sha256"] = hashlib.sha256(canonical({k: v for k, v in report.items() if k != "report_sha256"}).encode()).hexdigest()
+    # Sign the report digest with the service Ed25519 key.
+    try:
+        sig, pub = sign_digest(report["report_sha256"])
+        report["signature"] = sig
+        report["signer_public_key"] = pub
+    except Exception:
+        report["signature"] = None
+        report["signer_public_key"] = None
     return report
 
 
-def verify_report(report: dict, csv_text: Optional[str] = None) -> bool:
+def verify_report(report: dict, csv_text: str | None = None) -> bool:
     body = {k: v for k, v in report.items() if k != "report_sha256"}
+    # Strip signature fields from the hashed body (they are not part of the report hash).
+    body = {k: v for k, v in body.items() if k not in ("signature", "signer_public_key")}
     if hashlib.sha256(canonical(body).encode()).hexdigest() != report.get("report_sha256"):
         return False
+    # Verify the Ed25519 signature if present.
+    sig_b64 = report.get("signature")
+    pub_b64 = report.get("signer_public_key")
+    if sig_b64 and pub_b64:
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+                Ed25519PublicKey,
+            )
+            pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(pub_b64))
+            pub.verify(base64.b64decode(sig_b64), bytes.fromhex(report.get("report_sha256")))
+        except Exception:
+            return False
     if csv_text is not None:
         computed_input_sha = hashlib.sha256(csv_text.encode()).hexdigest()
         if computed_input_sha != report.get("input_sha256"):

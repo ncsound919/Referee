@@ -71,7 +71,7 @@ describe('Compute & Cloudflare & Kaggle Multi-Account Integrations', () => {
   });
 
   test('GET /api/compute/offload returns backend verification report', async () => {
-    const res = await computeGet();
+    const res = await computeGet(new Request('http://localhost/api/compute/offload') as any);
     expect(res.status).toBe(200);
 
     const body = await res.json();

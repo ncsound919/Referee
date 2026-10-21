@@ -58,6 +58,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     const v2 = writeVerdictToLedger({
@@ -84,6 +85,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     expect(v2.previous_block_hash).toBe(v1.sha256_hash);
@@ -119,6 +121,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     // Tamper with in-memory block verdict statement
@@ -149,6 +152,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     writeVerdictToLedger({
@@ -168,6 +172,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     const records = getLedgerRecords();
@@ -196,6 +201,7 @@ describe('Extended Test Suite: Ledger Tamper Detection & File Persistence', () =
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     const response = addAuthorResponseToRecord(
@@ -255,6 +261,7 @@ describe('Extended Test Suite: API Routes', () => {
       author_responses: [],
       raw_audit_results: {},
       provenance: 'computed',
+      report_sha256: 'a'.repeat(64),
     });
 
     const req200 = new Request(`http://localhost/api/ledger?id=${record.verdict_id}`);
@@ -369,7 +376,7 @@ describe('Extended Test Suite: API Routes', () => {
 
   test('GET and POST /api/hypothesis/generate', async () => {
     // GET
-    const resGet = await hypGet();
+    const resGet = await hypGet(new Request('http://localhost/api/hypothesis/generate') as any);
     expect(resGet.status).toBe(200);
     const bodyGet = await resGet.json();
     expect(Array.isArray(bodyGet.queue)).toBe(true);

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeAuditPipeline } from '@/lib/orchestrator';
+import { requireOperator } from '@/lib/internal-auth';
 import { ClaimSpec } from '@/lib/types';
 import { SAMPLE_CLAIMS } from '@/lib/sample-claims';
-import { extractClaimSpecWithGemini, generateAuditorCritiqueWithGemini } from '@/lib/gemini-referee';
+import { extractClaimSpecWithGemini } from '@/lib/gemini-referee';
 import { tryGetCoreClient } from '@/lib/integrations/referee-core-client';
 
 export async function POST(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const body = await req.json();
     let claimSpec: ClaimSpec;
@@ -52,46 +55,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Attempt to route through the referee-core Python engine if configured.
-    // When csv_text is supplied and the engine is reachable, use deterministic Python scoring.
-    if (body.csv_text && typeof body.csv_text === 'string') {
-      const coreClient = tryGetCoreClient();
-      if (coreClient) {
-        try {
-          const coreResult = await coreClient.audit(
-            claimSpec as unknown as Record<string, unknown>,
-            body.csv_text as string,
-            body.policy as Record<string, unknown> | undefined
-          );
-          return NextResponse.json({ source: 'referee-core', ...coreResult });
-        } catch (coreErr) {
-          // Fall through to heuristic pipeline if engine call fails.
-          console.warn('[audit] referee-core call failed, falling back to heuristic pipeline:', coreErr);
-        }
-      }
+    // --- Fail-closed: a real prediction table + the deterministic engine are required. ---
+    // Simulated heuristic verdicts are no longer returned from this endpoint.
+    if (typeof body.csv_text !== 'string' || body.csv_text.trim() === '') {
+      return NextResponse.json(
+        {
+          status: 'UNVERIFIABLE',
+          error:
+            'A prediction CSV (csv_text) is required. The audit engine refuses to produce a verdict without a table; simulated heuristic results are not returned.',
+        },
+        { status: 409 }
+      );
     }
 
-    // Optional LLM Auditor statement
-    const customAuditorStatement: string | undefined = undefined;
-
-    // Execute the deterministic orchestrator pipeline
-    const output = await executeAuditPipeline(claimSpec, {
-      customAuditorStatement,
-    });
-
-    // If Gemini is active, generate advisory note without mutating cryptographic ledger record
-    if (output.success && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-      try {
-        const auditorNote = await generateAuditorCritiqueWithGemini(output.auditResults);
-        if (auditorNote) {
-          (output as unknown as Record<string, unknown>).llmCritiqueAdvisory = auditorNote;
-        }
-      } catch {
-        // Non-fatal
-      }
+    const coreClient = tryGetCoreClient();
+    if (!coreClient) {
+      return NextResponse.json(
+        {
+          status: 'ENGINE_UNAVAILABLE',
+          error:
+            'referee-core is not configured (REFEREE_CORE_URL unset). The audit engine refuses to produce a verdict without the deterministic Python core.',
+        },
+        { status: 503 }
+      );
     }
 
-    return NextResponse.json(output);
+    try {
+      const coreResult = await coreClient.audit(
+        claimSpec as unknown as Record<string, unknown>,
+        body.csv_text as string,
+        body.policy as Record<string, unknown> | undefined
+      );
+      return NextResponse.json({ source: 'referee-core', ...coreResult });
+    } catch (coreErr) {
+      console.warn('[audit] referee-core call failed, refusing fabricated fallback:', coreErr);
+      return NextResponse.json(
+        {
+          status: 'ENGINE_UNAVAILABLE',
+          error: `referee-core audit failed: ${coreErr instanceof Error ? coreErr.message : String(coreErr)}`,
+        },
+        { status: 502 }
+      );
+    }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import {
   runAutonomousIteration,
   getAutonomousState,
@@ -13,7 +14,10 @@ import { setSystemStatus } from '@/lib/ledger';
  * Telemetry endpoint: returns current autonomous runner status,
  * iteration counts, active principles, and recent execution history.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   try {
     const state = getAutonomousState();
     return NextResponse.json(state);
@@ -32,6 +36,8 @@ export async function GET() {
  * - action: 'status' -> returns state
  */
 export async function POST(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'step';

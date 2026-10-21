@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    # The repository's default branch is `master`; `main` is kept so a mirror
+    # or a rename does not silently stop running the gate.
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: python (ruff + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip
+      # The dev extra pins ruff (see [tool.ruff] in pyproject.toml), so the
+      # linter that gates the build is the same one the project configures.
+      - run: pip install -e ".[dev]"
+      # Real gate: no `|| true`. ruff's rule set is pinned in pyproject.toml.
+      - name: ruff
+        run: python -m ruff check referee_core tests
+      # Whole suite, not a hand-picked subset. `testpaths = ["tests"]` in
+      # pyproject.toml makes bare `pytest` collect every file under tests/.
+      # tests/conftest.py sets REFEREE_ENV=development so the FastAPI app runs
+      # open in-process; REFEREE_API_KEY is deliberately NOT set here, so the
+      # "fail closed without a key" behaviour is still covered by the suite.
+      - name: pytest
+        run: python -m pytest
+
+  typescript:
+    name: typescript (tsc + bun test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      # Real gate: no `|| true`.
+      - name: typecheck
+        run: bunx tsc --noEmit
+      # Whole suite: bun test discovers every *.test.ts under the repository.
+      - name: test
+        run: bun test

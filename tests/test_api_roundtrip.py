@@ -12,16 +12,13 @@ Covers:
 """
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 
 import pandas as pd
-import pytest
 from fastapi.testclient import TestClient
 
 from referee_core.api import app
-from referee_core.schema import ClaimSpec
 
 client = TestClient(app)
 

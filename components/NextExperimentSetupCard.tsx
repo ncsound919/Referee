@@ -1,18 +1,38 @@
 'use client';
 
 import React from 'react';
-import { VerdictRecord } from '@/lib/types';
-import { retrieveActivePrinciples } from '@/lib/experience-base';
+import { VerdictRecord, Principle } from '@/lib/types';
 import { FlaskConical, Sparkles, ArrowRight, Brain, Cpu, CheckCircle2 } from 'lucide-react';
 
 interface NextExperimentSetupCardProps {
   record: VerdictRecord;
+  /**
+   * Active principles for the domain, supplied by the caller.
+   *
+   * These used to be read straight out of `@/lib/experience-base` inside this
+   * component, which put server-side state in the browser bundle. The
+   * dashboard now loads the experience base from `/api/experience` and passes
+   * the relevant slice down.
+   */
+  principles?: Principle[];
   onLaunchNextExperiment?: (skills: string[], description: string) => void;
 }
 
-export function NextExperimentSetupCard({ record, onLaunchNextExperiment }: NextExperimentSetupCardProps) {
-  // Retrieve active principles for the record's domain task
-  const activePrinciples = retrieveActivePrinciples(record.domain_task);
+export function NextExperimentSetupCard({
+  record,
+  principles,
+  onLaunchNextExperiment,
+}: NextExperimentSetupCardProps) {
+  // Active principles for this record's domain, mirroring the server-side
+  // `retrieveActivePrinciples` selection (status, utility floor, domain match).
+  const activePrinciples = (principles ?? [])
+    .filter((p) => p.status === 'active' && p.utility_score >= 0.3)
+    .filter((p) => {
+      const domain = record.domain_task;
+      if (!domain || domain === 'other') return true;
+      return p.domain === domain;
+    })
+    .sort((a, b) => b.utility_score - a.utility_score);
 
   // Determine intelligent next experiment recommendation based on verdict
   const getNextExperimentRecommendation = () => {

@@ -24,19 +24,9 @@ import {
   RecursiveRepairIteration,
   Principle,
   HarnessEntry,
+  SystemStatus,
 } from '@/lib/types';
 import { SAMPLE_CLAIMS } from '@/lib/sample-claims';
-import { executeAuditPipeline, runRecursiveRepairLoop } from '@/lib/orchestrator';
-import { getLedgerRecords, verifyLedgerChain, addAuthorResponseToRecord, setSystemStatus, SystemStatus } from '@/lib/ledger';
-import {
-  getExperienceStore,
-  applyUtilityDecay,
-  addTrajectorySupportToPrinciple,
-} from '@/lib/experience-base';
-import {
-  getHarnessEntries,
-  runHeldOutHarnessValidation,
-} from '@/lib/harness-library';
 import {
   ShieldAlert,
   Cpu,
@@ -49,6 +39,43 @@ import {
   FileText,
   AlertTriangle,
 } from 'lucide-react';
+
+/**
+ * Shape returned by `POST /api/demo/pipeline`.
+ *
+ * The demo pipeline runs on the server. It used to run inside this browser
+ * bundle, which put the evidence ledger (and its `node:sqlite` store) into the
+ * client build and let a browser fabricate a verdict locally.
+ */
+interface DemoPipelineOutput {
+  success: boolean;
+  terminalMessage: string;
+  auditResults: AuditResults;
+  verdictRecord?: VerdictRecord;
+  logSteps: OrchestrationLogStep[];
+  toolCallCount: number;
+}
+
+/** POST JSON and return the parsed body, or null on any failure. */
+async function postJson(url: string, body: unknown): Promise<unknown> {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** Run the simulated demo pipeline on the server. */
+async function runDemoPipeline(spec: ClaimSpec): Promise<DemoPipelineOutput | null> {
+  const data = await postJson('/api/demo/pipeline', { claim_spec: spec });
+  return (data as DemoPipelineOutput | null) ?? null;
+}
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>('audit');
@@ -73,40 +100,99 @@ export default function Home() {
   const [repairFinalRecord, setRepairFinalRecord] = useState<VerdictRecord | undefined>(undefined);
   const [isRepairLoading, setIsRepairLoading] = useState<boolean>(false);
   const [systemStatus, setLocalSystemStatus] = useState<SystemStatus>('STOPPED');
+  const [currentActivity, setCurrentActivity] = useState<string>('');
+  const [currentPhase, setCurrentPhase] = useState<string>('IDLE');
+
+  // Poll autonomous state periodically so top bar reflects live activities
+  useEffect(() => {
+    async function pollAutonomous() {
+      try {
+        const res = await fetch('/api/autonomous/run');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.systemStatus) setLocalSystemStatus(data.systemStatus);
+          if (data.currentActivity) setCurrentActivity(data.currentActivity);
+          if (data.currentPhase) setCurrentPhase(data.currentPhase);
+        }
+      } catch {}
+    }
+    pollAutonomous();
+    const interval = setInterval(pollAutonomous, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  /** Reload the evidence ledger from the server. */
+  const refreshLedger = async () => {
+    try {
+      const res = await fetch('/api/ledger');
+      if (!res.ok) return;
+      const data = (await res.json()) as { ledger?: VerdictRecord[] };
+      setLedgerRecords(data.ledger ?? []);
+    } catch {
+      /* keep the last known state */
+    }
+  };
+
+  /** Reload the experience base from the server. */
+  const refreshExperience = async () => {
+    try {
+      const res = await fetch('/api/experience');
+      if (!res.ok) return;
+      const data = (await res.json()) as { principles?: Principle[] };
+      setPrinciples(data.principles ?? []);
+    } catch {
+      /* keep the last known state */
+    }
+  };
+
+  /** Reload the harness library from the server. */
+  const refreshHarnesses = async () => {
+    try {
+      const res = await fetch('/api/harness');
+      if (!res.ok) return;
+      const data = (await res.json()) as { harnesses?: HarnessEntry[] };
+      setHarnesses(data.harnesses ?? []);
+    } catch {
+      /* keep the last known state */
+    }
+  };
 
   // Initialize with the landmark October 2026 Bone Mets claim audit on first render
   useEffect(() => {
     async function init() {
-      const records = getLedgerRecords();
-      setLedgerRecords(records);
-      setPrinciples(getExperienceStore());
-      setHarnesses(getHarnessEntries());
+      await Promise.all([refreshLedger(), refreshExperience(), refreshHarnesses()]);
 
       // Execute initial audit for demo
-      const initialRun = await executeAuditPipeline(SAMPLE_CLAIMS.oct2026_bonemets);
-      setAuditResults(initialRun.auditResults);
-      if (initialRun.verdictRecord) {
-        setVerdictRecord(initialRun.verdictRecord);
+      const initialRun = await runDemoPipeline(SAMPLE_CLAIMS.oct2026_bonemets);
+      if (initialRun) {
+        setAuditResults(initialRun.auditResults);
+        if (initialRun.verdictRecord) {
+          setVerdictRecord(initialRun.verdictRecord);
+        }
+        setLogSteps(initialRun.logSteps);
+        setToolCallCount(initialRun.toolCallCount);
       }
-      setLogSteps(initialRun.logSteps);
-      setToolCallCount(initialRun.toolCallCount);
     }
     init();
   }, []);
 
   const handleDecayUtility = async () => {
-    applyUtilityDecay(0.1);
-    setPrinciples(getExperienceStore());
+    await postJson('/api/experience', { action: 'decay', decay_rate: 0.1 });
+    await refreshExperience();
   };
 
   const handlePromoteCandidate = async (principleId: string) => {
-    addTrajectorySupportToPrinciple(principleId, `audit_independent_${Date.now()}`);
-    setPrinciples(getExperienceStore());
+    await postJson('/api/experience', {
+      action: 'support_trajectory',
+      principle_id: principleId,
+      trajectory_id: `audit_independent_${Date.now()}`,
+    });
+    await refreshExperience();
   };
 
   const handleValidateHarness = async (harnessId: string) => {
-    runHeldOutHarnessValidation(harnessId);
-    setHarnesses(getHarnessEntries());
+    await postJson('/api/harness', { action: 'validate_held_out', harness_id: harnessId });
+    await refreshHarnesses();
   };
 
   const handleStartAudit = async (spec: ClaimSpec) => {
@@ -114,17 +200,18 @@ export default function Home() {
     setCurrentClaimSpec(spec);
 
     try {
-      // Execute the audit pipeline
-      const output = await executeAuditPipeline(spec);
-      setAuditResults(output.auditResults);
-      if (output.verdictRecord) {
-        setVerdictRecord(output.verdictRecord);
+      const output = await runDemoPipeline(spec);
+      if (output) {
+        setAuditResults(output.auditResults);
+        if (output.verdictRecord) {
+          setVerdictRecord(output.verdictRecord);
+        }
+        setLogSteps(output.logSteps);
+        setToolCallCount(output.toolCallCount);
       }
-      setLogSteps(output.logSteps);
-      setToolCallCount(output.toolCallCount);
 
       // Update ledger records
-      setLedgerRecords(getLedgerRecords());
+      await refreshLedger();
     } catch (err: unknown) {
       console.error('Audit run error:', err);
     } finally {
@@ -142,11 +229,21 @@ export default function Home() {
   ) => {
     setIsRepairLoading(true);
     try {
-      const res = await runRecursiveRepairLoop(spec, maxIterations, options);
-      setRepairIterations(res.iterations);
-      setRepairFinalRecord(res.finalVerdictRecord);
-      setLedgerRecords(getLedgerRecords());
-      setPrinciples(getExperienceStore());
+      const res = await postJson('/api/recursive-repair', {
+        claim_spec: spec,
+        max_iterations: maxIterations,
+        ...(options ?? {}),
+      });
+      if (res) {
+        const payload = res as {
+          iterations?: RecursiveRepairIteration[];
+          finalVerdictRecord?: VerdictRecord;
+        };
+        setRepairIterations(payload.iterations ?? []);
+        setRepairFinalRecord(payload.finalVerdictRecord);
+      }
+      await refreshLedger();
+      await refreshExperience();
     } catch (err) {
       console.error('Repair loop error:', err);
     } finally {
@@ -159,22 +256,33 @@ export default function Home() {
     authorName: string,
     text: string
   ): Promise<boolean> => {
-    const resp = addAuthorResponseToRecord(verdictId, authorName, text);
-    if (resp) {
-      setLedgerRecords(getLedgerRecords());
-      if (verdictRecord && verdictRecord.verdict_id === verdictId) {
-        setVerdictRecord({
-          ...verdictRecord,
-          author_responses: [...(verdictRecord.author_responses || []), resp],
-        });
-      }
-      return true;
+    const res = await postJson('/api/ledger', {
+      verdict_id: verdictId,
+      author_name: authorName,
+      response_text: text,
+    });
+    if (!res) return false;
+
+    const response = (res as { response?: VerdictRecord['author_responses'][number] }).response;
+    await refreshLedger();
+    if (response && verdictRecord && verdictRecord.verdict_id === verdictId) {
+      setVerdictRecord({
+        ...verdictRecord,
+        author_responses: [...(verdictRecord.author_responses || []), response],
+      });
     }
-    return false;
+    return Boolean(response);
   };
 
-  const handleVerifyChain = async () => {
-    return verifyLedgerChain();
+  const handleVerifyChain = async (): Promise<{ isValid: boolean; verifiedBlocks: number }> => {
+    try {
+      const res = await fetch('/api/ledger?verify=true');
+      if (!res.ok) return { isValid: false, verifiedBlocks: 0 };
+      const data = (await res.json()) as { isValid?: boolean; verifiedBlocks?: number };
+      return { isValid: Boolean(data.isValid), verifiedBlocks: data.verifiedBlocks ?? 0 };
+    } catch {
+      return { isValid: false, verifiedBlocks: 0 };
+    }
   };
 
   const handleRunAuditForQuestion = (claim: ClaimSpec) => {
@@ -231,7 +339,6 @@ export default function Home() {
         </div>
         <button
           onClick={async () => {
-            setSystemStatus('RUNNING');
             setLocalSystemStatus('RUNNING');
             try {
               await fetch('/api/autonomous/run', {
@@ -251,7 +358,6 @@ export default function Home() {
         </button>
         <button 
           onClick={async () => {
-            setSystemStatus('PAUSED');
             setLocalSystemStatus('PAUSED');
             try {
               await fetch('/api/autonomous/run', {
@@ -271,7 +377,6 @@ export default function Home() {
         </button>
         <button 
           onClick={async () => {
-            setSystemStatus('STOPPED');
             setLocalSystemStatus('STOPPED');
             try {
               await fetch('/api/autonomous/run', {
@@ -295,6 +400,18 @@ export default function Home() {
         >
           Open Autonomous Closed-Loop Console →
         </button>
+
+        {/* Live Activity & Phase Ticker */}
+        {currentActivity && (
+          <div className="w-full flex items-center justify-center space-x-2 pt-1 border-t border-slate-800/60 text-xs font-mono">
+            <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-cyan-300 text-[10px] font-bold">
+              {currentPhase}
+            </span>
+            <span className="text-emerald-300 text-[11px] truncate max-w-2xl animate-pulse">
+              {currentActivity}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Main Content Area */}
@@ -359,6 +476,7 @@ export default function Home() {
                 </div>
                 <VerdictDisplay
                   record={verdictRecord}
+                  principles={principles}
                   onNavigateToLedger={() => setActiveTab('ledger')}
                 />
               </div>

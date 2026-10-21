@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireOperator } from '@/lib/internal-auth';
 import {
   getLedgerRecords,
   getLedgerRecordById,
@@ -7,6 +8,9 @@ import {
 } from '@/lib/ledger';
 
 export async function GET(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
+
   const url = new URL(req.url);
   const verify = url.searchParams.get('verify');
   const verdictId = url.searchParams.get('id');
@@ -32,6 +36,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireOperator(req);
+  if (guard) return guard;
   try {
     const body = await req.json();
     const { verdict_id, author_name, response_text, rebuttal_url, author_email } = body;
