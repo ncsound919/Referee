@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Principle, HarnessEntry, OncologyDomainTask } from '@/lib/types';
+import { AutonomousRunnerDashboard } from './AutonomousRunnerDashboard';
 import {
   Brain,
   ShieldAlert,
@@ -20,6 +21,7 @@ import {
   ExternalLink,
   ChevronRight,
   UserCheck,
+  Zap,
 } from 'lucide-react';
 
 interface SelfLearningDashboardProps {
@@ -39,7 +41,7 @@ export function SelfLearningDashboard({
   onValidateHarness,
   isLoading,
 }: SelfLearningDashboardProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'principles' | 'harnesses' | 'reflexion' | 'boundary'>('principles');
+  const [activeSubTab, setActiveSubTab] = useState<'principles' | 'harnesses' | 'reflexion' | 'boundary' | 'autonomous'>('autonomous');
   const [selectedDomain, setSelectedDomain] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -118,6 +120,17 @@ export function SelfLearningDashboard({
       {/* Sub-Tabs Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="flex space-x-2">
+          <button
+            onClick={() => setActiveSubTab('autonomous')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors ${
+              activeSubTab === 'autonomous'
+                ? 'bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Autonomous Closed-Loop</span>
+          </button>
           <button
             onClick={() => setActiveSubTab('principles')}
             className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors ${
@@ -541,6 +554,9 @@ export function SelfLearningDashboard({
           </div>
         </div>
       )}
+
+      {/* SUBTAB 5: Autonomous Runner Dashboard */}
+      {activeSubTab === 'autonomous' && <AutonomousRunnerDashboard />}
     </div>
   );
 }

@@ -202,27 +202,63 @@ export default function Home() {
       />
 
       {/* Autonomous System Control Bar */}
-      <div className="bg-slate-900 border-b border-slate-800 p-3 flex justify-center space-x-4">
+      <div className="bg-slate-900 border-b border-slate-800 p-2.5 flex flex-wrap items-center justify-center gap-3">
+        <div className="flex items-center space-x-2 mr-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
+            Autonomous Engine:
+          </span>
+        </div>
         <button
           onClick={async () => {
             setSystemStatus('RUNNING');
-            await fetch('/api/autonomous/run', { method: 'POST' });
+            try {
+              await fetch('/api/autonomous/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'start' }),
+              });
+            } catch {}
           }}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs"
+          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
         >
-          START
+          START DAEMON
         </button>
         <button 
-          onClick={() => setSystemStatus('PAUSED')}
-          className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs"
+          onClick={async () => {
+            setSystemStatus('PAUSED');
+            try {
+              await fetch('/api/autonomous/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'stop' }),
+              });
+            } catch {}
+          }}
+          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
         >
           PAUSE
         </button>
         <button 
-          onClick={() => setSystemStatus('STOPPED')}
-          className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs"
+          onClick={async () => {
+            setSystemStatus('STOPPED');
+            try {
+              await fetch('/api/autonomous/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'stop' }),
+              });
+            } catch {}
+          }}
+          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
         >
           STOP
+        </button>
+        <button
+          onClick={() => setActiveTab('learning')}
+          className="px-3 py-1.5 rounded-lg bg-indigo-950/70 border border-indigo-700/60 hover:bg-indigo-900/80 text-indigo-300 font-mono text-xs cursor-pointer transition-colors"
+        >
+          Open Autonomous Closed-Loop Console →
         </button>
       </div>
 
