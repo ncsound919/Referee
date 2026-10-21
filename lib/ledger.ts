@@ -1,6 +1,7 @@
 import { VerdictRecord, VerdictType, OncologyDomainTask, AuthorResponse } from './types';
 import { syncHash } from './crypto-utils';
 import { DEMO_LEDGER_FIXTURES, UNIVERSAL_CLAIM_LIMIT } from '../fixtures/demo-ledger';
+import { ledgerStore } from './ledger-store';
 
 export { UNIVERSAL_CLAIM_LIMIT, DEMO_LEDGER_FIXTURES };
 
@@ -78,10 +79,6 @@ export function computeBlockHash(
   return syncHash(canonicalJson(blockPayload));
 }
 
-// Immutable active evidence ledger starts empty.
-// Fabricated/historical demo fixtures live in fixtures/demo-ledger.ts with synthetic: true.
-let activeLedger: VerdictRecord[] = [];
-
 export type SystemStatus = 'RUNNING' | 'PAUSED' | 'STOPPED';
 let systemStatus: SystemStatus = 'STOPPED';
 
@@ -94,15 +91,18 @@ export function setSystemStatus(status: SystemStatus): void {
 }
 
 export function getLedgerRecords(): VerdictRecord[] {
-  return [...activeLedger];
+  return ledgerStore.getAll();
 }
 
 export function getLedgerRecordById(verdictId: string): VerdictRecord | undefined {
-  return activeLedger.find((r) => r.verdict_id === verdictId);
+  return ledgerStore.getAll().find((r) => r.verdict_id === verdictId);
 }
 
 export function resetLedger(initialRecords: VerdictRecord[] = []): void {
-  activeLedger = [...initialRecords];
+  ledgerStore.reset();
+  for (const record of initialRecords) {
+    ledgerStore.append(record);
+  }
 }
 
 /**
@@ -121,11 +121,12 @@ export function writeVerdictToLedger(
     );
   }
 
-  const previousBlock = activeLedger[activeLedger.length - 1];
+  const records = ledgerStore.getAll();
+  const previousBlock = records[records.length - 1];
   const previousHash = previousBlock
     ? previousBlock.sha256_hash
     : '0000000000000000000000000000000000000000000000000000000000000000';
-  const blockHeight = activeLedger.length + 1;
+  const blockHeight = records.length + 1;
   const verdictId = `vrd_${Date.now()}_b${blockHeight}`;
 
   const blockHash = computeBlockHash(blockHeight, previousHash, {
@@ -145,7 +146,7 @@ export function writeVerdictToLedger(
     synthetic: false,
   };
 
-  activeLedger.push(newRecord);
+  ledgerStore.append(newRecord);
   return newRecord;
 }
 
@@ -158,7 +159,8 @@ export function addAuthorResponseToRecord(
   text: string,
   rebuttalUrl?: string
 ): AuthorResponse | null {
-  const record = activeLedger.find((r) => r.verdict_id === verdictId);
+  const records = ledgerStore.getAll();
+  const record = records.find((r) => r.verdict_id === verdictId);
   if (!record) return null;
 
   const timestamp = new Date().toISOString();
@@ -183,6 +185,13 @@ export function addAuthorResponseToRecord(
 
   // Update record hash after author response append
   record.sha256_hash = computeBlockHash(record.block_height, record.previous_block_hash, record);
+
+  // Re-persist updated records list
+  ledgerStore.reset();
+  for (const r of records) {
+    ledgerStore.append(r);
+  }
+
   return response;
 }
 
@@ -194,15 +203,16 @@ export function addAuthorResponseToRecord(
  * If any verdict, statement, baseline margin, or evidence was tampered with,
  * this function immediately returns isValid: false.
  */
-export function verifyLedgerChain(chainToVerify: VerdictRecord[] = activeLedger): {
+export function verifyLedgerChain(chainToVerify?: VerdictRecord[]): {
   isValid: boolean;
   verifiedBlocks: number;
   brokenBlockIndex?: number;
   failureReason?: string;
 } {
-  for (let i = 0; i < chainToVerify.length; i++) {
-    const curr = chainToVerify[i];
-    const prev = i > 0 ? chainToVerify[i - 1] : null;
+  const chain = chainToVerify ?? ledgerStore.getAll();
+  for (let i = 0; i < chain.length; i++) {
+    const curr = chain[i];
+    const prev = i > 0 ? chain[i - 1] : null;
     const expectedPrevHash = prev
       ? prev.sha256_hash
       : '0000000000000000000000000000000000000000000000000000000000000000';
@@ -227,5 +237,5 @@ export function verifyLedgerChain(chainToVerify: VerdictRecord[] = activeLedger)
     }
   }
 
-  return { isValid: true, verifiedBlocks: chainToVerify.length };
+  return { isValid: true, verifiedBlocks: chain.length };
 }

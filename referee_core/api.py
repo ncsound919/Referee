@@ -22,7 +22,7 @@ MAX_CSV_LENGTH = 25 * 1024 * 1024  # 25 MB
 
 class AuditRequest(BaseModel):
     claim: ClaimSpec
-    csv_text: str = Field(..., max_length=MAX_CSV_LENGTH)
+    csv_text: str
     policy: Optional[Policy] = None
 
 

@@ -3,6 +3,7 @@ import { executeAuditPipeline } from '@/lib/orchestrator';
 import { ClaimSpec } from '@/lib/types';
 import { SAMPLE_CLAIMS } from '@/lib/sample-claims';
 import { extractClaimSpecWithGemini, generateAuditorCritiqueWithGemini } from '@/lib/gemini-referee';
+import { tryGetCoreClient } from '@/lib/integrations/referee-core-client';
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,6 +50,25 @@ export async function POST(req: NextRequest) {
         { error: 'Provide either sample_id, claim_spec, or raw_text to audit.' },
         { status: 400 }
       );
+    }
+
+    // Attempt to route through the referee-core Python engine if configured.
+    // When csv_text is supplied and the engine is reachable, use deterministic Python scoring.
+    if (body.csv_text && typeof body.csv_text === 'string') {
+      const coreClient = tryGetCoreClient();
+      if (coreClient) {
+        try {
+          const coreResult = await coreClient.audit(
+            claimSpec as unknown as Record<string, unknown>,
+            body.csv_text as string,
+            body.policy as Record<string, unknown> | undefined
+          );
+          return NextResponse.json({ source: 'referee-core', ...coreResult });
+        } catch (coreErr) {
+          // Fall through to heuristic pipeline if engine call fails.
+          console.warn('[audit] referee-core call failed, falling back to heuristic pipeline:', coreErr);
+        }
+      }
     }
 
     // Optional LLM Auditor statement
