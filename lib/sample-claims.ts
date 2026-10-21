@@ -189,3 +189,10 @@ export const SAMPLE_CLAIMS: Record<string, ClaimSpec> = {
       'We achieved a high C-index of 0.88 on brain MRI survival prediction using a convolutional neural network. Training details and split partitions are omitted.',
   },
 };
+
+// Also index by claim_id for seamless lookup
+for (const spec of Object.values(SAMPLE_CLAIMS)) {
+  if (spec.claim_id && !SAMPLE_CLAIMS[spec.claim_id]) {
+    SAMPLE_CLAIMS[spec.claim_id] = spec;
+  }
+}
