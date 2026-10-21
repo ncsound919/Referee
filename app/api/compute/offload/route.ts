@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server';
+import { offloadToCloudflareWorker, runKaggleKernel, verifyComputeSystems } from '@/lib/integrations/offload';
 
 const ALLOWED_TARGETS = new Set(['tumortwin', 'cloudflare', 'kaggle']);
 
+/**
+ * GET /api/compute/offload
+ * Return connection and verification status of all compute backends
+ * (Cloudflare Workers/AI/R2, Kaggle multi-account cluster, etc.)
+ */
+export async function GET() {
+  try {
+    const status = await verifyComputeSystems();
+    return NextResponse.json({ status: 'ok', backends: status });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Failed to verify compute systems', details: msg }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/compute/offload
+ * Offload compute workloads to TumorTwin, Cloudflare, or Kaggle
+ */
 export async function POST(req: Request) {
   try {
     const { target, task } = await req.json();
@@ -29,10 +49,20 @@ export async function POST(req: Request) {
       }
       const data = await res.json();
       return NextResponse.json({ result: data });
-    } else {
-      // Cloudflare / Kaggle worker stub
-      return NextResponse.json({ result: { status: 'queued', target } });
     }
+
+    if (target === 'cloudflare') {
+      const result = await offloadToCloudflareWorker(task);
+      return NextResponse.json({ result });
+    }
+
+    if (target === 'kaggle') {
+      const kernelName = typeof task.kernelName === 'string' ? task.kernelName : (task.id || 'referee-audit-job');
+      const result = await runKaggleKernel(kernelName, task);
+      return NextResponse.json({ result });
+    }
+
+    return NextResponse.json({ error: 'Unhandled compute target' }, { status: 400 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: 'Compute offload failed', details: msg }, { status: 500 });
