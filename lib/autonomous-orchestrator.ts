@@ -59,38 +59,58 @@ export interface AutonomousState {
   lastRunTimestamp?: string;
 }
 
-// In-memory autonomous engine state
-let currentQuestionIndex = 0;
-let totalIterationsRun = 0;
-let successfulReproductions = 0;
-let reflectionsTriggered = 0;
-const executionHistory: AutonomousIterationOutput[] = [];
-let runnerTimer: NodeJS.Timeout | null = null;
+interface GlobalAutonomousState {
+  currentQuestionIndex: number;
+  totalIterationsRun: number;
+  successfulReproductions: number;
+  reflectionsTriggered: number;
+  executionHistory: AutonomousIterationOutput[];
+  runnerTimer: NodeJS.Timeout | null;
+}
+
+const g = globalThis as unknown as { __autonomousEngine?: GlobalAutonomousState };
+if (!g.__autonomousEngine) {
+  g.__autonomousEngine = {
+    currentQuestionIndex: 0,
+    totalIterationsRun: 0,
+    successfulReproductions: 0,
+    reflectionsTriggered: 0,
+    executionHistory: [],
+    runnerTimer: null,
+  };
+}
+const engineStore = g.__autonomousEngine;
 
 export function getAutonomousState(): AutonomousState {
   const activePrinciples = retrieveActivePrinciples();
   return {
     systemStatus: getSystemStatus(),
-    currentQuestionIndex,
-    totalIterationsRun,
-    successfulReproductions,
-    reflectionsTriggered,
+    currentQuestionIndex: engineStore.currentQuestionIndex,
+    totalIterationsRun: engineStore.totalIterationsRun,
+    successfulReproductions: engineStore.successfulReproductions,
+    reflectionsTriggered: engineStore.reflectionsTriggered,
     activePrinciplesCount: activePrinciples.length,
-    recentHistory: [...executionHistory].slice(-10),
-    lastRunTimestamp: executionHistory.length > 0 ? executionHistory[executionHistory.length - 1].timestamp : undefined,
+    recentHistory: [...engineStore.executionHistory].slice(-10),
+    lastRunTimestamp:
+      engineStore.executionHistory.length > 0
+        ? engineStore.executionHistory[engineStore.executionHistory.length - 1].timestamp
+        : undefined,
   };
 }
 
 export function startAutonomousRunner(intervalMs: number = 30000): { started: boolean; intervalMs: number } {
   setSystemStatus('RUNNING');
 
-  if (runnerTimer) {
-    clearInterval(runnerTimer);
+  if (engineStore.runnerTimer) {
+    clearInterval(engineStore.runnerTimer);
+    engineStore.runnerTimer = null;
   }
 
-  runnerTimer = setInterval(async () => {
+  engineStore.runnerTimer = setInterval(async () => {
     try {
-      await runAutonomousIteration();
+      if (getSystemStatus() === 'RUNNING') {
+        await runAutonomousIteration();
+      }
     } catch (err) {
       console.error('[autonomous-orchestrator] Background iteration error:', err);
     }
@@ -99,11 +119,20 @@ export function startAutonomousRunner(intervalMs: number = 30000): { started: bo
   return { started: true, intervalMs };
 }
 
+export function pauseAutonomousRunner(): { paused: boolean } {
+  setSystemStatus('PAUSED');
+  if (engineStore.runnerTimer) {
+    clearInterval(engineStore.runnerTimer);
+    engineStore.runnerTimer = null;
+  }
+  return { paused: true };
+}
+
 export function stopAutonomousRunner(): { stopped: boolean } {
   setSystemStatus('STOPPED');
-  if (runnerTimer) {
-    clearInterval(runnerTimer);
-    runnerTimer = null;
+  if (engineStore.runnerTimer) {
+    clearInterval(engineStore.runnerTimer);
+    engineStore.runnerTimer = null;
   }
   return { stopped: true };
 }
@@ -120,15 +149,15 @@ export async function runAutonomousIteration(options?: {
   if (status !== 'RUNNING') {
     return {
       status: 'skipped',
-      iterationNumber: totalIterationsRun,
+      iterationNumber: engineStore.totalIterationsRun,
       question: AUTONOMOUS_RESEARCH_QUESTIONS[0],
       reason: `System status is ${status}; set system status to RUNNING to proceed.`,
       timestamp: new Date().toISOString(),
     };
   }
 
-  totalIterationsRun++;
-  const iterationNum = totalIterationsRun;
+  engineStore.totalIterationsRun++;
+  const iterationNum = engineStore.totalIterationsRun;
   const timestamp = new Date().toISOString();
 
   // ── Step 1: Select Progressive Research Question ───────────────────────────
@@ -136,10 +165,10 @@ export async function runAutonomousIteration(options?: {
   if (options?.forceQuestionId) {
     question =
       AUTONOMOUS_RESEARCH_QUESTIONS.find((q) => q.id === options.forceQuestionId) ||
-      AUTONOMOUS_RESEARCH_QUESTIONS[currentQuestionIndex % AUTONOMOUS_RESEARCH_QUESTIONS.length];
+      AUTONOMOUS_RESEARCH_QUESTIONS[engineStore.currentQuestionIndex % AUTONOMOUS_RESEARCH_QUESTIONS.length];
   } else {
-    question = AUTONOMOUS_RESEARCH_QUESTIONS[currentQuestionIndex % AUTONOMOUS_RESEARCH_QUESTIONS.length];
-    currentQuestionIndex++;
+    question = AUTONOMOUS_RESEARCH_QUESTIONS[engineStore.currentQuestionIndex % AUTONOMOUS_RESEARCH_QUESTIONS.length];
+    engineStore.currentQuestionIndex++;
   }
 
   // ── Step 2: Generate Grounded Hypothesis & Adversarial Review ───────────────
@@ -159,7 +188,7 @@ export async function runAutonomousIteration(options?: {
       nextStepRecommendation: 'Re-ground hypothesis in validated literature DOIs before executing experiment.',
       timestamp,
     };
-    executionHistory.push(skippedOutput);
+    engineStore.executionHistory.push(skippedOutput);
     return skippedOutput;
   }
 
@@ -193,7 +222,7 @@ export async function runAutonomousIteration(options?: {
       nextStepRecommendation: 'Pivot research question to an unexplored biological domain to restore marginal evidence value.',
       timestamp,
     };
-    executionHistory.push(haltedOutput);
+    engineStore.executionHistory.push(haltedOutput);
     return haltedOutput;
   }
 
@@ -238,13 +267,13 @@ export async function runAutonomousIteration(options?: {
   const verdict = auditOutput.verdictRecord?.verdict || 'FAILS_BASELINE';
 
   if (verdict === 'REPRODUCED') {
-    successfulReproductions++;
+    engineStore.successfulReproductions++;
     // Reinforce utility of principles that contributed to success
     for (const p of activePrinciples) {
       updatePrincipleUtility(p.principle_id, 0.05);
     }
   } else if (verdict === 'FAILS_BASELINE' || verdict === 'LEAKAGE_DETECTED') {
-    reflectionsTriggered++;
+    engineStore.reflectionsTriggered++;
     // Layer 2 Reflexion fires on failure
     const reflexion = await executeReflexionLoop(
       testSpec,
@@ -289,6 +318,6 @@ export async function runAutonomousIteration(options?: {
     timestamp,
   };
 
-  executionHistory.push(iterationOutput);
+  engineStore.executionHistory.push(iterationOutput);
   return iterationOutput;
 }

@@ -3,6 +3,7 @@ import {
   runAutonomousIteration,
   getAutonomousState,
   startAutonomousRunner,
+  pauseAutonomousRunner,
   stopAutonomousRunner,
 } from '@/lib/autonomous-orchestrator';
 import { setSystemStatus } from '@/lib/ledger';
@@ -39,6 +40,11 @@ export async function POST(req: NextRequest) {
       const intervalMs = typeof body.intervalMs === 'number' ? body.intervalMs : 30000;
       const res = startAutonomousRunner(intervalMs);
       return NextResponse.json({ status: 'started', ...res });
+    }
+
+    if (action === 'pause') {
+      const res = pauseAutonomousRunner();
+      return NextResponse.json({ status: 'paused', ...res });
     }
 
     if (action === 'stop') {

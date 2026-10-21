@@ -72,6 +72,7 @@ export default function Home() {
   const [repairIterations, setRepairIterations] = useState<RecursiveRepairIteration[]>([]);
   const [repairFinalRecord, setRepairFinalRecord] = useState<VerdictRecord | undefined>(undefined);
   const [isRepairLoading, setIsRepairLoading] = useState<boolean>(false);
+  const [systemStatus, setLocalSystemStatus] = useState<SystemStatus>('STOPPED');
 
   // Initialize with the landmark October 2026 Bone Mets claim audit on first render
   useEffect(() => {
@@ -204,14 +205,34 @@ export default function Home() {
       {/* Autonomous System Control Bar */}
       <div className="bg-slate-900 border-b border-slate-800 p-2.5 flex flex-wrap items-center justify-center gap-3">
         <div className="flex items-center space-x-2 mr-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              systemStatus === 'RUNNING'
+                ? 'bg-emerald-400 animate-pulse'
+                : systemStatus === 'PAUSED'
+                ? 'bg-amber-400'
+                : 'bg-rose-500'
+            }`}
+          />
           <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
             Autonomous Engine:
+          </span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              systemStatus === 'RUNNING'
+                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                : systemStatus === 'PAUSED'
+                ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                : 'bg-rose-950 text-rose-300 border border-rose-800'
+            }`}
+          >
+            {systemStatus}
           </span>
         </div>
         <button
           onClick={async () => {
             setSystemStatus('RUNNING');
+            setLocalSystemStatus('RUNNING');
             try {
               await fetch('/api/autonomous/run', {
                 method: 'POST',
@@ -220,28 +241,38 @@ export default function Home() {
               });
             } catch {}
           }}
-          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
+          className={`px-3 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors ${
+            systemStatus === 'RUNNING'
+              ? 'bg-emerald-500 text-white ring-2 ring-emerald-400'
+              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+          }`}
         >
           START DAEMON
         </button>
         <button 
           onClick={async () => {
             setSystemStatus('PAUSED');
+            setLocalSystemStatus('PAUSED');
             try {
               await fetch('/api/autonomous/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'stop' }),
+                body: JSON.stringify({ action: 'pause' }),
               });
             } catch {}
           }}
-          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
+          className={`px-3 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors ${
+            systemStatus === 'PAUSED'
+              ? 'bg-amber-500 text-white ring-2 ring-amber-400'
+              : 'bg-amber-600 hover:bg-amber-500 text-white'
+          }`}
         >
           PAUSE
         </button>
         <button 
           onClick={async () => {
             setSystemStatus('STOPPED');
+            setLocalSystemStatus('STOPPED');
             try {
               await fetch('/api/autonomous/run', {
                 method: 'POST',
@@ -250,7 +281,11 @@ export default function Home() {
               });
             } catch {}
           }}
-          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors"
+          className={`px-3 py-1.5 rounded-lg font-mono text-xs font-semibold cursor-pointer shadow-sm transition-colors ${
+            systemStatus === 'STOPPED'
+              ? 'bg-rose-700 text-white ring-2 ring-rose-400'
+              : 'bg-rose-600 hover:bg-rose-500 text-white'
+          }`}
         >
           STOP
         </button>

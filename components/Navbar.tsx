@@ -14,7 +14,7 @@ export function Navbar({ activeTab, setActiveTab, blockCount }: NavbarProps) {
     { id: 'audit', label: 'Audit Console', icon: Cpu },
     { id: 'tumortwin', label: 'TumorTwin Sim', icon: Cpu },
     { id: 'hypothesis', label: 'Hypothesis Tournament', icon: Sparkles },
-    { id: 'questions', label: 'Research Agenda (10 Qs)', icon: FlaskConical },
+    { id: 'questions', label: 'Research Agenda (15 Qs & 50 Bounties)', icon: FlaskConical },
     { id: 'ingestion', label: 'Data Ingestion', icon: Database },
     { id: 'ledger', label: `Evidence Ledger (${blockCount})`, icon: Database },
     { id: 'repair', label: 'Recursive Repair (Bounded)', icon: Layers },

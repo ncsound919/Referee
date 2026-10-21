@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Zap,
   Play,
+  Pause,
   Square,
   RefreshCw,
   Cpu,
@@ -115,6 +116,23 @@ export function AutonomousRunnerDashboard() {
     }
   };
 
+  const handlePauseDaemon = async () => {
+    try {
+      const res = await fetch('/api/autonomous/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' }),
+      });
+      const data = await res.json();
+      if (data.status === 'paused' || data.paused) {
+        setMessage('Autonomous daemon paused');
+        await fetchTelemetry();
+      }
+    } catch {
+      // Non-fatal
+    }
+  };
+
   const handleStopDaemon = async () => {
     try {
       const res = await fetch('/api/autonomous/run', {
@@ -201,23 +219,32 @@ export function AutonomousRunnerDashboard() {
               <span>{isExecuting ? 'Running Step...' : 'Run Single Iteration'}</span>
             </button>
 
-            {/* Start / Stop Daemon */}
+            {/* Start / Pause / Stop Daemon */}
             {!isRunning ? (
               <button
                 onClick={handleStartDaemon}
-                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-semibold transition-colors cursor-pointer"
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-semibold transition-colors cursor-pointer shadow-sm"
               >
                 <Play className="w-3.5 h-3.5" />
-                <span>Start Daemon</span>
+                <span>{telemetry?.systemStatus === 'PAUSED' ? 'Resume Daemon' : 'Start Daemon'}</span>
               </button>
             ) : (
-              <button
-                onClick={handleStopDaemon}
-                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-semibold transition-colors cursor-pointer"
-              >
-                <Square className="w-3.5 h-3.5" />
-                <span>Stop Daemon</span>
-              </button>
+              <div className="flex items-center space-x-1.5">
+                <button
+                  onClick={handlePauseDaemon}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-mono font-semibold transition-colors cursor-pointer shadow-sm"
+                >
+                  <Pause className="w-3.5 h-3.5" />
+                  <span>Pause</span>
+                </button>
+                <button
+                  onClick={handleStopDaemon}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-semibold transition-colors cursor-pointer shadow-sm"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  <span>Stop</span>
+                </button>
+              </div>
             )}
 
             <button

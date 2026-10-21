@@ -135,6 +135,17 @@ describe('Autonomous Self-Running & Progressive Experimentation System', () => {
     const bodyStart = await resStart.json();
     expect(bodyStart.status).toBe('started');
 
+    // Pause action
+    const reqPause = new Request('http://localhost/api/autonomous/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'pause' }),
+    });
+    const resPause = await autoPost(reqPause as any);
+    expect(resPause.status).toBe(200);
+    const bodyPause = await resPause.json();
+    expect(bodyPause.status).toBe('paused');
+
     // Stop action
     const reqStop = new Request('http://localhost/api/autonomous/run', {
       method: 'POST',
@@ -145,5 +156,24 @@ describe('Autonomous Self-Running & Progressive Experimentation System', () => {
     expect(resStop.status).toBe(200);
     const bodyStop = await resStop.json();
     expect(bodyStop.status).toBe('stopped');
+  });
+
+  test('Registered research questions has all 15 prioritized oncology items', async () => {
+    const { AUTONOMOUS_RESEARCH_QUESTIONS } = await import('../lib/research-questions');
+    expect(AUTONOMOUS_RESEARCH_QUESTIONS.length).toBe(15);
+    const categories = new Set(AUTONOMOUS_RESEARCH_QUESTIONS.map((q) => q.category));
+    expect(categories.has('Breast Cancer')).toBe(true);
+    expect(categories.has('Tumor Genomics')).toBe(true);
+    expect(categories.has('Metastasis Biology')).toBe(true);
+    expect(categories.has('Neuro-Oncology')).toBe(true);
+  });
+
+  test('GET /api/bounties returns all 50 community bounties', async () => {
+    const { GET: bountiesGet } = await import('../app/api/bounties/route');
+    const res = await bountiesGet();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(50);
+    expect(body.bounties.length).toBe(50);
   });
 });
