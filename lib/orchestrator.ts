@@ -521,7 +521,7 @@ export async function runRecursiveRepairLoop(
 
   // Run initial audit
   const initialRun = await executeAuditPipeline(currentSpec);
-  let currentVerdict = initialRun.verdictRecord?.verdict || 'FAILS_BASELINE';
+  let currentVerdict: VerdictType = initialRun.verdictRecord?.verdict || 'FAILS_BASELINE';
 
   if (currentVerdict === 'REPRODUCED' || currentVerdict === 'OUT_OF_SCOPE') {
     return {
@@ -540,7 +540,7 @@ export async function runRecursiveRepairLoop(
       ],
       finalClaimSpec: currentSpec,
       finalVerdictRecord: initialRun.verdictRecord,
-      achievedReproduced: currentVerdict === 'REPRODUCED',
+      achievedReproduced: (currentVerdict as VerdictType) === 'REPRODUCED',
     };
   }
 
@@ -673,7 +673,7 @@ export async function runRecursiveRepairLoop(
 
   // If iteration cap reached without reproduction: claim is marked IRREPARABLE_WITHIN_BUDGET
   // and Layer 2 Reflection fires automatically!
-  if (currentVerdict !== 'REPRODUCED' && finalRecord) {
+  if ((currentVerdict as VerdictType) !== 'REPRODUCED' && finalRecord) {
     if (!finalRecord.verdict_statement.includes('IRREPARABLE_WITHIN_BUDGET')) {
       finalRecord.verdict_statement = `[SUB-VERDICT: IRREPARABLE_WITHIN_BUDGET] ${finalRecord.verdict_statement} Maximum bounded repair exhausted without achieving clean reproduction.`;
     }
@@ -691,7 +691,7 @@ export async function runRecursiveRepairLoop(
     iterations: history,
     finalClaimSpec: currentSpec,
     finalVerdictRecord: finalRecord,
-    achievedReproduced: currentVerdict === 'REPRODUCED',
+    achievedReproduced: (currentVerdict as VerdictType) === 'REPRODUCED',
     haltedByMev,
     mevEvaluation: lastMevEvaluation,
   };

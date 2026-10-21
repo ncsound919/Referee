@@ -122,7 +122,6 @@ export function pureSha256(ascii: string): string {
 
 export function syncHash(message: string): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const nodeCrypto = typeof require !== 'undefined' ? require('crypto') : null;
     if (nodeCrypto && typeof nodeCrypto.createHash === 'function') {
       return nodeCrypto.createHash('sha256').update(message, 'utf8').digest('hex');

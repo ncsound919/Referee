@@ -79,7 +79,7 @@ describe('Integration Unit Tests: API Routes without live server', () => {
   test('GET /api/audit/:claim_id returns 404 when no records match', async () => {
     resetLedger();
     const req = new Request('http://localhost/api/audit/nonexistent_claim_999');
-    const res = await auditByClaimIdGet(req as any, { params: { claim_id: 'nonexistent_claim_999' } });
+    const res = await auditByClaimIdGet(req as any, { params: Promise.resolve({ claim_id: 'nonexistent_claim_999' }) });
     expect(res.status).toBe(404);
   });
 
@@ -96,15 +96,23 @@ describe('Integration Unit Tests: API Routes without live server', () => {
       scopeTested: ['License Passport Verification'],
       scopeNotTested: ['Clinical Trial'],
       universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
-      evidenceLinks: {},
+      evidenceLinks: {
+        claimSpecHash: 'hash_claim',
+        auditResultsHash: 'hash_audit',
+        ledgerRecordHash: '',
+        datasetId: 'CAMELYON16',
+        repositorySnapshot: 'repo_snapshot',
+        rawLogUrl: '/audit-logs/test_claim_fetch_01.json',
+      },
       tool_invocations: 3,
       license_status: 'PASSED',
       author_responses: [],
+      raw_audit_results: {},
       provenance: 'computed',
     });
 
     const req = new Request('http://localhost/api/audit/test_claim_fetch_01');
-    const res = await auditByClaimIdGet(req as any, { params: { claim_id: 'test_claim_fetch_01' } });
+    const res = await auditByClaimIdGet(req as any, { params: Promise.resolve({ claim_id: 'test_claim_fetch_01' }) });
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.claim_id).toBe('test_claim_fetch_01');

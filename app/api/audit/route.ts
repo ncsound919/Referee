@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
           status: 'DRAFT_SPEC_EXTRACTED',
           requiresConfirmation: true,
           draftClaimSpec: extraction.claimSpec,
-          missing_fields: extraction.missingFields || extraction.claimSpec?.missing_fields || [],
+          missing_fields: extraction.claimSpec?.missing_fields || [],
           message:
             'Draft ClaimSpec extracted from text. Confirm or complete missing fields before executing deterministic audit; unconfirmed text is never auto-audited with fabricated defaults.',
         });
@@ -38,13 +38,13 @@ export async function POST(req: NextRequest) {
           {
             error:
               'Cannot audit raw text: required fields (title, claimed_metric) could not be verified. Missing fields are unverifiable, not guessed.',
-            missing_fields: extraction.missingFields,
+            missing_fields: extraction.claimSpec?.missing_fields || [],
           },
           { status: 400 }
         );
       }
 
-      claimSpec = extraction.claimSpec;
+      claimSpec = extraction.claimSpec as ClaimSpec;
     } else {
       return NextResponse.json(
         { error: 'Provide either sample_id, claim_spec, or raw_text to audit.' },
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       try {
         const auditorNote = await generateAuditorCritiqueWithGemini(output.auditResults);
         if (auditorNote) {
-          (output as Record<string, unknown>).llmCritiqueAdvisory = auditorNote;
+          (output as unknown as Record<string, unknown>).llmCritiqueAdvisory = auditorNote;
         }
       } catch {
         // Non-fatal

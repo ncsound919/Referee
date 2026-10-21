@@ -143,7 +143,7 @@ export class CloudflareService {
       status: 'queued',
       engine: 'cloudflare-workers',
       script: scriptName,
-      taskId: `cf_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      taskId: `cf_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
       timestamp: new Date().toISOString(),
       payload: task.payload || {},
     };

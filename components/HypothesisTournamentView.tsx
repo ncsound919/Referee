@@ -18,10 +18,6 @@ export function HypothesisTournamentView({ onRunAuditWithHypothesis }: Hypothesi
   const [userRole, setUserRole] = useState('academic');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchQueue();
-  }, []);
-
   const fetchQueue = async () => {
     try {
       const res = await fetch('/api/hypothesis/generate');
@@ -33,6 +29,23 @@ export function HypothesisTournamentView({ onRunAuditWithHypothesis }: Hypothesi
       console.error('Failed to fetch hypothesis queue:', err);
     }
   };
+
+  useEffect(() => {
+    let ignore = false;
+    fetch('/api/hypothesis/generate')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!ignore && data.queue) {
+          setQueue(data.queue);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch hypothesis queue:', err);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleGenerateHypothesis = async (e: React.FormEvent) => {
     e.preventDefault();

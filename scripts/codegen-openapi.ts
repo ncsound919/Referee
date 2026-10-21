@@ -13,6 +13,9 @@
  * generated files and re-run after engine schema changes.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 const BASE_URL = process.env.REFEREE_CORE_URL?.replace(/\/$/, '') ?? 'http://localhost:8000';
 
 interface OpenAPISchema {
@@ -147,7 +150,7 @@ async function main() {
   }
 
   const outPath = new URL('../../lib/integrations/referee-core-openapi.ts', import.meta.url).pathname.slice(1);
-  await Bun.write(outPath, lines.join('\n'));
+  fs.writeFileSync(outPath, lines.join('\n'), 'utf-8');
   console.log(`✅ Written to ${outPath}`);
   console.log(`   Schemas: ${Object.keys(components).length}`);
   console.log(`   Paths:   ${Object.keys(spec.paths).length}`);

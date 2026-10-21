@@ -14,9 +14,9 @@ import { getLedgerRecords } from '@/lib/ledger';
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { claim_id: string } }
+  { params }: { params: Promise<{ claim_id: string }> }
 ) {
-  const { claim_id } = params;
+  const { claim_id } = await params;
 
   if (!claim_id || claim_id.trim().length === 0) {
     return NextResponse.json({ error: 'claim_id is required' }, { status: 400 });

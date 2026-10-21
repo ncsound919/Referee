@@ -119,9 +119,9 @@ export function runRefereeTool(
     obs = Math.max(0.02, Math.min(0.98, obs));
 
     calibrationBins.push({
-      bin_center: safeFloat(center, 0.5),
-      predicted_prob: safeFloat(center, 0.5),
-      observed_freq: safeFloat(obs, 0.5),
+      bin_center: safeFloat(center, 'bin_center'),
+      predicted_prob: safeFloat(center, 'predicted_prob'),
+      observed_freq: safeFloat(obs, 'observed_freq'),
       sample_count: 25,
     });
   }
@@ -133,11 +133,11 @@ export function runRefereeTool(
   const diseasePrevalence = 0.32; // Typical metastasis / progression prevalence
 
   for (let t = 0.05; t <= 0.65; t += 0.05) {
-    const pt = safeFloat(t, 0.1);
+    const pt = safeFloat(t, 'threshold');
     const weight = pt / (1 - pt);
 
     // Treat all net benefit = prevalence - (1 - prevalence) * weight
-    const nbTreatAll = safeFloat(diseasePrevalence - (1 - diseasePrevalence) * weight, 0);
+    const nbTreatAll = safeFloat(diseasePrevalence - (1 - diseasePrevalence) * weight, 'nbTreatAll');
     const nbTreatNone = 0.0;
 
     // Model Net Benefit
@@ -157,11 +157,11 @@ export function runRefereeTool(
 
     const tp = diseasePrevalence * sensitivity;
     const fp = (1 - diseasePrevalence) * (1 - specificity);
-    const nbModel = safeFloat(tp - fp * weight, 0);
+    const nbModel = safeFloat(tp - fp * weight, 'nbModel');
 
     decisionCurve.push({
-      threshold: safeFloat(pt, 0.1),
-      net_benefit_model: safeFloat(nbModel, 0),
+      threshold: safeFloat(pt, 'threshold'),
+      net_benefit_model: safeFloat(nbModel, 'net_benefit_model'),
       net_benefit_treat_all: safeFloat(nbTreatAll, 'nbTreatAll'),
       net_benefit_treat_none: safeFloat(nbTreatNone, 'nbTreatNone'),
     });
