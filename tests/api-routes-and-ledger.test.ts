@@ -403,7 +403,7 @@ describe('Extended Test Suite: API Routes', () => {
       }),
     });
 
-    const res = await repairPost(req);
+    const res = await repairPost(req as any);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.iterations).toBeDefined();
