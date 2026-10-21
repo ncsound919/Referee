@@ -16,11 +16,14 @@ export interface PublicationReference {
   journal?: string;
 }
 
+export type Provenance = 'computed' | 'reference' | 'simulated';
+
 export interface ClaimMetric {
   name: string;
   value: number;
   confidence_interval?: [number, number];
   split_type: string;
+  provenance?: Provenance;
 }
 
 export interface ClaimSpec {
@@ -81,6 +84,7 @@ export interface BaselineModelResult {
   brier_score: number;
   description: string;
   beaten_by_claim: boolean;
+  provenance?: Provenance;
 }
 
 export interface BaselineHarnessResult {
@@ -93,6 +97,7 @@ export interface BaselineHarnessResult {
   baselines: BaselineModelResult[];
   clinical_reference: string;
   why_fixed: string;
+  provenance?: Provenance;
 }
 
 export interface LeakageRuleViolation {
@@ -112,6 +117,7 @@ export interface LeakageCheckResult {
   patient_overlap_rate: number;
   batch_confound_r2: number;
   nuisance_classifier_auc: number;
+  provenance?: Provenance;
 }
 
 export interface CalibrationPoint {
@@ -142,6 +148,7 @@ export interface StatisticalRefereeResult {
   calibration_curve: CalibrationPoint[];
   decision_curve: DecisionCurvePoint[];
   never_nan_enforced: boolean;
+  provenance?: Provenance;
 }
 
 export interface AuditResults {
@@ -152,6 +159,7 @@ export interface AuditResults {
   referee_result?: StatisticalRefereeResult;
   overall_status: 'COMPLETED' | 'TERMINATED_AT_LICENSE' | 'TERMINATED_UNVERIFIABLE';
   tool_call_count: number;
+  provenance?: Provenance;
 }
 
 export type VerdictType =
@@ -204,6 +212,8 @@ export interface VerdictRecord {
     leakage?: LeakageCheckResult;
     referee?: StatisticalRefereeResult;
   };
+  provenance?: Provenance;
+  synthetic?: boolean;
 }
 
 export interface RecursiveRepairIteration {

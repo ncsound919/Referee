@@ -1,25 +1,35 @@
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field
 
 from .audit import audit_csv, verify_report
-from .schema import ClaimSpec, Policy
-from .engine import EngineRegistry
+from .engine import EngineRegistry, ManifestSnapshot
 from .engine.tumortwin_adapter import TumorTwinAdapter
+from .schema import ClaimSpec, Policy
 
 registry = EngineRegistry()
 registry.register(TumorTwinAdapter())
 
 app = FastAPI(title="referee-core", version="0.1.0")
 
+MAX_CSV_LENGTH = 25 * 1024 * 1024  # 25 MB
+
 
 class AuditRequest(BaseModel):
     claim: ClaimSpec
-    csv_text: str
+    csv_text: str = Field(..., max_length=MAX_CSV_LENGTH)
     policy: Optional[Policy] = None
+
+
+class VerifyRequest(BaseModel):
+    model_config = {"extra": "allow"}
+    report: Optional[dict] = None
+    csv_text: Optional[str] = None
 
 
 class HypothesisPreCheck(BaseModel):
@@ -28,17 +38,32 @@ class HypothesisPreCheck(BaseModel):
     pipeline_skills: List[str]
 
 
+class RunExperimentRequest(BaseModel):
+    engine_name: str
+    snapshot_json: str
+    sha256: str
+    workspace: Optional[str] = None
+
+
 @app.post("/audit")
 def audit(req: AuditRequest) -> dict:
+    if len(req.csv_text.encode("utf-8")) > MAX_CSV_LENGTH:
+        raise HTTPException(413, "Prediction CSV exceeds 25 MB size limit.")
     return audit_csv(req.csv_text, req.claim, req.policy)
 
 
+from fastapi import FastAPI, HTTPException, Request
+
+
 @app.post("/verify")
-def verify(report: dict) -> dict:
+async def verify(req: Request) -> dict:
     try:
-        return {"valid": verify_report(report)}
-    except KeyError as exc:
-        raise HTTPException(422, f"not a report: missing {exc}")
+        body = await req.json()
+        report_data = body.get("report", body) if isinstance(body, dict) else {}
+        csv_text = body.get("csv_text") if isinstance(body, dict) else None
+        return {"valid": verify_report(report_data, csv_text)}
+    except Exception as exc:
+        raise HTTPException(422, f"not a report: {exc}")
 
 
 @app.post("/pre_check")
@@ -66,9 +91,17 @@ async def pre_check_hypothesis(req: HypothesisPreCheck):
 
 
 @app.post("/run_experiment")
-async def run_experiment(engine_name: str, snapshot_json: str, sha256: str):
-    from .engine import ManifestSnapshot
-    snapshot = ManifestSnapshot(canonical_json=snapshot_json, sha256=sha256)
-    adapter = registry.require(engine_name)
-    results = adapter.run(snapshot, "/tmp/workspace")
+async def run_experiment(req: RunExperimentRequest):
+    # Verify snapshot integrity against SHA-256 digest
+    computed_digest = hashlib.sha256(req.snapshot_json.encode("utf-8")).hexdigest()
+    if computed_digest != req.sha256:
+        raise HTTPException(400, "Snapshot SHA-256 digest does not match supplied snapshot_json")
+
+    workspace = req.workspace or tempfile.mkdtemp(prefix="referee_workspace_")
+    snapshot = ManifestSnapshot(canonical_json=req.snapshot_json, sha256=req.sha256)
+    adapter = registry.require(req.engine_name)
+
+    # Validate before running
+    adapter.validate(snapshot, workspace)
+    results = adapter.run(snapshot, workspace)
     return {"results": results}

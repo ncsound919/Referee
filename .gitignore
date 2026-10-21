@@ -1,7 +1,33 @@
+# Dependencies
 node_modules/
+.venv/
+env/
+venv/
+
+# Build outputs
 .next/
+out/
+build/
+dist/
+*.egg-info/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Coverage & test logs
 coverage/
-.DS_Store
 *.log
+
+# Environment variables
 .env*
 !.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Studio temporary screenshots/artifacts
+.aistudio/

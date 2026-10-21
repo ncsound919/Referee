@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateHypothesis } from '@/lib/hypothesis/generation';
 import { runSkeptic } from '@/lib/hypothesis/skeptic';
 import { HypothesisRecord } from '@/lib/hypothesis/types';
+import { calculateMEV } from '@/lib/mev';
 
 // In-memory tournament queue storage for preview
 const tournamentQueue: HypothesisRecord[] = [];
@@ -54,6 +55,17 @@ export async function POST(req: Request) {
       }
     }
 
+    // Calculate deterministic MEV score
+    const mevEval = await calculateMEV(
+      {
+        domain: hypothesisDraft.domain || 'breast_transcriptomic_metastasis',
+        skills: pipelineSkills,
+        description: hypothesisDraft.claimText,
+      },
+      1,
+      null
+    );
+
     // 4. Queue for the Digital Wetlab Tournament
     const newHypothesis: HypothesisRecord = {
       id: `hyp_${Date.now()}`,
@@ -66,7 +78,7 @@ export async function POST(req: Request) {
       noveltyScore: hypothesisDraft.noveltyScore || 0.85,
       status: 'QUEUED',
       skepticCritique: critique.critique,
-      mevScore: Number((Math.random() * 0.4 + 0.45).toFixed(2)),
+      mevScore: Number(mevEval.mev.toFixed(2)),
       createdAt: new Date().toISOString(),
     };
 

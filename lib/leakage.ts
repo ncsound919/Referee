@@ -27,6 +27,7 @@ export function runLeakageDetectorTool(claimSpec: ClaimSpec): LeakageCheckResult
       patient_overlap_rate: 0,
       batch_confound_r2: 0,
       nuisance_classifier_auc: 0,
+      provenance: 'simulated',
     };
   }
 
@@ -197,5 +198,6 @@ export function runLeakageDetectorTool(claimSpec: ClaimSpec): LeakageCheckResult
     patient_overlap_rate: patientOverlapRate,
     batch_confound_r2: batchConfoundR2,
     nuisance_classifier_auc: nuisanceClassifierAuc,
+    provenance: 'simulated',
   };
 }

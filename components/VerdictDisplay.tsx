@@ -104,6 +104,21 @@ export function VerdictDisplay({ record, onNavigateToLedger }: VerdictDisplayPro
 
   return (
     <div className={`rounded-xl border ${theme.border} ${theme.bg} ${theme.glow} p-6 space-y-6`}>
+      {/* Simulated Demo Warning Banner */}
+      {(record.provenance === 'simulated' || record.synthetic) && (
+        <div className="bg-amber-950/80 border border-amber-600/70 text-amber-200 px-4 py-2.5 rounded-lg flex items-center justify-between text-xs font-mono">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>SIMULATED DEMO RECORD:</strong> Values generated via statistical heuristics. Not committed to immutable evidence ledger.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 bg-amber-900/60 rounded border border-amber-500/40 uppercase tracking-widest text-[10px] font-bold">
+            Simulated
+          </span>
+        </div>
+      )}
+
       {/* Top Banner & Verdict Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
         <div className="flex items-center space-x-3.5">

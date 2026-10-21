@@ -18,45 +18,32 @@ export async function POST(req: NextRequest) {
     } else if (body.claim_spec) {
       claimSpec = body.claim_spec;
     } else if (body.raw_text) {
-      // Use Generator agent to extract ClaimSpec
+      // Use Generator agent to extract draft ClaimSpec for human review
       const extraction = await extractClaimSpecWithGemini(body.raw_text);
-      if (extraction.claimSpec && extraction.claimSpec.title) {
-        claimSpec = {
-          claim_id: extraction.claimSpec.claim_id || `claim_${Date.now()}`,
-          title: extraction.claimSpec.title,
-          authors: extraction.claimSpec.authors || ['Anonymous / Extracted'],
-          publication_reference: extraction.claimSpec.publication_reference || { year: 2026 },
-          repository_url: extraction.claimSpec.repository_url || 'https://github.com/extracted-repo',
-          dataset_id: extraction.claimSpec.dataset_id || 'METABRIC',
-          intended_use: extraction.claimSpec.intended_use || 'research',
-          user_role: extraction.claimSpec.user_role || 'academic',
-          institutional_affiliation: extraction.claimSpec.institutional_affiliation || 'Extracted Institution',
-          domain_task: extraction.claimSpec.domain_task || 'breast_transcriptomic_metastasis',
-          claimed_metric: extraction.claimSpec.claimed_metric || { name: 'AUC', value: 0.75, split_type: 'random' },
-          split_description: extraction.claimSpec.split_description,
-          patient_identifier_field: extraction.claimSpec.patient_identifier_field,
-          missing_fields: extraction.claimSpec.missing_fields || [],
-          raw_claim_text: body.raw_text,
-        };
-      } else {
-        // Fallback default claim if extraction did not return structured object
-        claimSpec = {
-          claim_id: `claim_${Date.now()}`,
-          title: 'Unstructured Extracted Claim',
-          authors: ['Extracted Author'],
-          publication_reference: { year: 2026 },
-          repository_url: 'https://github.com/extracted/repo',
-          dataset_id: 'METABRIC',
-          intended_use: 'research',
-          user_role: 'academic',
-          institutional_affiliation: 'Academic Medical Center',
-          domain_task: 'breast_transcriptomic_metastasis',
-          claimed_metric: { name: 'AUC', value: 0.78, split_type: 'Random CV' },
-          split_description: body.raw_text.slice(0, 150),
-          missing_fields: [],
-          raw_claim_text: body.raw_text,
-        };
+
+      if (!body.confirm_draft) {
+        return NextResponse.json({
+          status: 'DRAFT_SPEC_EXTRACTED',
+          requiresConfirmation: true,
+          draftClaimSpec: extraction.claimSpec,
+          missing_fields: extraction.missingFields || extraction.claimSpec?.missing_fields || [],
+          message:
+            'Draft ClaimSpec extracted from text. Confirm or complete missing fields before executing deterministic audit; unconfirmed text is never auto-audited with fabricated defaults.',
+        });
       }
+
+      if (!extraction.claimSpec || !extraction.claimSpec.title || !extraction.claimSpec.claimed_metric) {
+        return NextResponse.json(
+          {
+            error:
+              'Cannot audit raw text: required fields (title, claimed_metric) could not be verified. Missing fields are unverifiable, not guessed.',
+            missing_fields: extraction.missingFields,
+          },
+          { status: 400 }
+        );
+      }
+
+      claimSpec = extraction.claimSpec;
     } else {
       return NextResponse.json(
         { error: 'Provide either sample_id, claim_spec, or raw_text to audit.' },
@@ -65,26 +52,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Optional LLM Auditor statement
-    let customAuditorStatement: string | undefined;
-    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-      try {
-        // Generate pre-assessment or critique
-      } catch {
-        // Fall back gracefully
-      }
-    }
+    const customAuditorStatement: string | undefined = undefined;
 
     // Execute the deterministic orchestrator pipeline
     const output = await executeAuditPipeline(claimSpec, {
       customAuditorStatement,
     });
 
-    // If Gemini is active, run the Auditor agent on the AuditResults
+    // If Gemini is active, generate advisory note without mutating cryptographic ledger record
     if (output.success && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
       try {
         const auditorNote = await generateAuditorCritiqueWithGemini(output.auditResults);
-        if (auditorNote && output.verdictRecord) {
-          output.verdictRecord.verdict_statement = `${auditorNote}\n\n[Deterministic Engine Statement]: ${output.verdictRecord.verdict_statement}`;
+        if (auditorNote) {
+          (output as Record<string, unknown>).llmCritiqueAdvisory = auditorNote;
         }
       } catch {
         // Non-fatal

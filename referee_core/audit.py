@@ -14,8 +14,27 @@ from .schema import UNIVERSAL_CLAIM_LIMIT, ClaimSpec, Policy, TableError, load_t
 VERDICTS = ["REPRODUCED", "NOT_REPRODUCED", "FAILS_BASELINE", "LEAKAGE_DETECTED", "UNVERIFIABLE", "OUT_OF_SCOPE"]
 
 
+def _round_floats(obj, precision: int = 6):
+    if isinstance(obj, float):
+        return round(obj, precision)
+    if isinstance(obj, dict):
+        return {k: _round_floats(v, precision) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_round_floats(v, precision) for v in obj]
+    return obj
+
+
 def canonical(obj) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
+    """Canonical JSON with float rounding to fixed precision to prevent BLAS/compiler jitter."""
+    return json.dumps(_round_floats(obj), sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _normalize_split_val(val: str, policy: Policy) -> str:
+    s = str(val).strip().lower()
+    for canon, aliases in policy.split_aliases.items():
+        if s == canon.lower() or s in [a.lower() for a in aliases]:
+            return canon
+    return str(val).strip()
 
 
 def _eval_rows(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> pd.DataFrame:
@@ -49,8 +68,13 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         missing.append("column 'split' is absent, so train/test separation cannot be checked")
     if missing:
         return _unverifiable(missing)
-    if not set(pd.unique(df["split"].dropna())) <= {policy.train_label, policy.test_label}:
-        return _unverifiable([f"split values must be '{policy.train_label}' or '{policy.test_label}'"])
+
+    # Normalize split values using policy aliases (case-folding and aliases)
+    df["split"] = df["split"].apply(lambda s: _normalize_split_val(s, policy))
+    valid_splits = {policy.train_label, policy.test_label}
+    unrecognized = set(pd.unique(df["split"].dropna())) - valid_splits
+    if unrecognized:
+        return _unverifiable([f"split values must be '{policy.train_label}' or '{policy.test_label}', found: {sorted(unrecognized)}"])
 
     ev = _eval_rows(df, claim, policy)
     if ev.empty:
@@ -69,7 +93,9 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
     dims["statistical_adequacy"] = "met" if adequate else "critical"
 
     # --- reproducibility ---
-    boot = metrics.cluster_bootstrap_auc(ev, "score", policy.n_boot, policy.seed, policy.max_degenerate_frac)
+    boot = metrics.cluster_bootstrap_auc(
+        ev, "score", policy.n_boot, policy.seed, policy.max_degenerate_frac, ci_level=policy.ci_level
+    )
     evidence["reproduced_auc"] = boot
     if boot["status"] == "refused":
         dims["reproducibility"] = "not_assessed"
@@ -80,12 +106,25 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         evidence["claim_vs_reproduced"] = {"claimed": claim.claimed_auc, "reproduced": boot["estimate"],
                                            "difference": claim.claimed_auc - boot["estimate"]}
 
+        # Utilize claimed_auc_ci consistency check if provided
+        if claim.claimed_auc_ci:
+            ci_lo, ci_hi = claim.claimed_auc_ci
+            rep_lo, rep_hi = boot["ci_low"], boot["ci_high"]
+            overlap = max(0.0, min(ci_hi, rep_hi) - max(ci_lo, rep_lo))
+            evidence["ci_overlap"] = {"claimed": [ci_lo, ci_hi], "reproduced": [rep_lo, rep_hi], "overlap": overlap}
+            if overlap == 0.0 and (ci_lo > rep_hi or rep_lo > ci_hi):
+                dims["reproducibility"] = "not_reproduced"
+                reasons.append(
+                    f"claimed CI [{ci_lo:.3f}, {ci_hi:.3f}] does not overlap reproduced interval [{rep_lo:.3f}, {rep_hi:.3f}]"
+                )
+
     # --- data integrity ---
     ov = leakage.patient_overlap(df, policy)
     evidence["patient_overlap"] = ov
     nuis = leakage.nuisance_checks(df, ev, boot.get("estimate"), policy)
     evidence["nuisance"] = nuis
     evidence["advisories"] = leakage.advisories(claim.split_description)
+
     critical = []
     if ov["status"] == "ok" and ov["shared_patients"] > 0:
         critical.append(f"{ov['shared_patients']} patient(s) appear in both train and test "
@@ -93,10 +132,20 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
     if ov["status"] == "ok" and ov["shared_sample_ids"] > 0:
         critical.append(f"{ov['shared_sample_ids']} sample_id(s) appear in both train and test")
     critical += [f"{n['covariate']}: {n['reason']}" for n in nuis if n["status"] == "critical"]
+
+    # When eval_on='all', check if training rows are included
+    if claim.eval_on == "all":
+        train_rows = int((df["split"] == policy.train_label).sum())
+        if train_rows > 0:
+            evidence["eval_includes_training_rows"] = True
+            reasons.append(f"eval_on='all' includes {train_rows} training row(s) in evaluation; cannot assert clean separation")
+
     if ov["status"] != "ok":
         dims["data_integrity"] = "not_assessable"
     elif critical:
         dims["data_integrity"] = "critical"
+    elif claim.eval_on == "all" and (df["split"] == policy.train_label).sum() > 0:
+        dims["data_integrity"] = "warning"
     elif any(n["status"] == "warning" for n in nuis):
         dims["data_integrity"] = "warning"
     else:
@@ -104,7 +153,7 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
 
     # --- negative control ---
     if "nc_score" in ev.columns and ev["nc_score"].notna().any():
-        nc = metrics.cluster_bootstrap_auc(ev, "nc_score", policy.n_boot, policy.seed + 1,
+        nc = metrics.cluster_bootstrap_auc(ev, "nc_score", policy.n_boot, policy.seed + policy.nc_seed_offset,
                                            policy.max_degenerate_frac, ci_level=policy.nc_ci_level)
         evidence["negative_control"] = nc
         if nc["status"] == "ok":
@@ -121,7 +170,7 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
 
     # --- permutation null ---
     if boot["status"] == "ok":
-        evidence["permutation"] = metrics.permutation_null(ev, "score", 999, policy.seed)
+        evidence["permutation"] = metrics.permutation_null(ev, "score", policy.n_perm, policy.seed)
 
     # --- calibration ---
     if claim.score_is_probability and boot["status"] == "ok":
@@ -130,6 +179,12 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         dims["calibration"] = "assessed" if cal["status"] == "ok" else "not_assessed"
     else:
         dims["calibration"] = "not_assessed"
+
+    # Always document critical findings in reasons, regardless of verdict
+    if critical:
+        for c_msg in critical:
+            if c_msg not in reasons:
+                reasons.append(c_msg)
 
     # --- verdict, from dimensions only ---
     if dims["statistical_adequacy"] == "critical":
@@ -142,10 +197,9 @@ def _audit(df: pd.DataFrame, claim: ClaimSpec, policy: Policy) -> dict:
         verdict = "UNVERIFIABLE"
     elif critical:
         verdict = "LEAKAGE_DETECTED"
-        reasons += critical
     elif dims["reproducibility"] == "not_reproduced":
         verdict = "NOT_REPRODUCED"
-        reasons.append(f"claimed AUC {claim.claimed_auc:.3f} exceeds the reproduced 95% interval "
+        reasons.append(f"claimed AUC {claim.claimed_auc:.3f} exceeds the reproduced {policy.ci_level:.0%} interval "
                        f"({boot['ci_low']:.3f} to {boot['ci_high']:.3f}) by more than the "
                        f"{policy.repro_tolerance} tolerance")
     else:
@@ -158,26 +212,39 @@ def _finish(claim: ClaimSpec, policy: Policy, input_sha: str, body: dict) -> dic
     try:
         core_version = md.version("referee-core")
     except Exception:
-        core_version = "0.1.0"
+        core_version = "unknown"
     try:
         np_version = md.version("numpy")
     except Exception:
-        np_version = "1.26.0"
+        np_version = "unknown"
     try:
         scipy_version = md.version("scipy")
     except Exception:
-        scipy_version = "1.11.0"
+        scipy_version = "unknown"
     try:
         skl_version = md.version("scikit-learn")
     except Exception:
-        skl_version = "1.3.0"
+        skl_version = "unknown"
 
     complete = all(v not in ("not_assessed", "not_assessable", "not_supplied") for v in body["dimensions"].values())
+
+    decision_payload = {
+        "claim": claim.model_dump(mode="json"),
+        "policy": policy.model_dump(mode="json"),
+        "input_sha256": input_sha,
+        "verdict": body["verdict"],
+        "reasons": body["reasons"],
+        "dimensions": body["dimensions"],
+        "evidence": body["evidence"],
+    }
+    decision_sha256 = hashlib.sha256(canonical(decision_payload).encode()).hexdigest()
+
     report = {
         "report_version": "1",
         "claim": claim.model_dump(mode="json"),
         "policy": policy.model_dump(mode="json"),
         "input_sha256": input_sha,
+        "decision_sha256": decision_sha256,
         "software": {"referee_core": core_version, "numpy": np_version,
                      "scipy": scipy_version, "scikit-learn": skl_version},
         **body,
@@ -186,10 +253,20 @@ def _finish(claim: ClaimSpec, policy: Policy, input_sha: str, body: dict) -> dic
         "not_assessed_note": ("Baseline comparison needs features and is not implemented in this version; "
                               "a REPRODUCED verdict does not mean the model beats a baseline."),
     }
-    report["report_sha256"] = hashlib.sha256(canonical(report).encode()).hexdigest()
+    report["report_sha256"] = hashlib.sha256(canonical({k: v for k, v in report.items() if k != "report_sha256"}).encode()).hexdigest()
     return report
 
 
-def verify_report(report: dict) -> bool:
+def verify_report(report: dict, csv_text: Optional[str] = None) -> bool:
     body = {k: v for k, v in report.items() if k != "report_sha256"}
-    return hashlib.sha256(canonical(body).encode()).hexdigest() == report["report_sha256"]
+    if hashlib.sha256(canonical(body).encode()).hexdigest() != report.get("report_sha256"):
+        return False
+    if csv_text is not None:
+        computed_input_sha = hashlib.sha256(csv_text.encode()).hexdigest()
+        if computed_input_sha != report.get("input_sha256"):
+            return False
+        # Re-run audit to verify deterministic reproducibility
+        re_audit = audit_csv(csv_text, ClaimSpec(**report["claim"]), Policy(**report["policy"]))
+        if re_audit.get("verdict") != report.get("verdict"):
+            return False
+    return True

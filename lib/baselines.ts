@@ -206,8 +206,21 @@ export function runBaselineHarnessTool(claimSpec: ClaimSpec): BaselineHarnessRes
   const task = claimSpec.domain_task || 'other';
   const config = DOMAIN_BASELINES[task] || DOMAIN_BASELINES['other'];
 
-  const baselines = config.getBaselines(claimSpec);
-  const claimMetric = claimSpec.claimed_metric?.value ?? 0.5;
+  const baselines = config.getBaselines(claimSpec).map((b) => ({
+    ...b,
+    provenance: 'reference' as const,
+  }));
+
+  if (
+    claimSpec.claimed_metric?.value === undefined ||
+    claimSpec.claimed_metric?.value === null ||
+    !Number.isFinite(claimSpec.claimed_metric.value)
+  ) {
+    throw new Error(
+      'Missing or non-finite claimed_metric.value: missing fields are unverifiable, not guessed.'
+    );
+  }
+  const claimMetric = claimSpec.claimed_metric.value;
 
   let bestBaseline = baselines[0];
   for (const b of baselines) {
@@ -235,5 +248,6 @@ export function runBaselineHarnessTool(claimSpec: ClaimSpec): BaselineHarnessRes
     baselines,
     clinical_reference: config.clinical_reference,
     why_fixed: config.why_fixed,
+    provenance: 'reference',
   };
 }

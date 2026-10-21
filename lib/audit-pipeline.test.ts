@@ -80,11 +80,12 @@ test('M5 Statistical Referee: 1,000 bootstrap iterations, never-NaN rule, 0.30 n
   assert.ok(leakedResult.negative_control_agreement > 0.3);
 });
 
-test('Layer 4 Ledger: SHA-256 block hash chaining and immutability', () => {
-  const verification = verifyLedgerChain();
-  assert.equal(verification.isValid, true);
-  assert.ok(verification.verifiedBlocks >= 4);
+test('Layer 4 Ledger: Cryptographic SHA-256 block hash chaining and tamper-evidence', () => {
+  // Empty ledger initially passes
+  const initialVerification = verifyLedgerChain();
+  assert.equal(initialVerification.isValid, true);
 
+  // Write a genuinely computed verdict record
   const newBlock = writeVerdictToLedger({
     claim_id: 'test_claim_unit',
     timestamp: new Date().toISOString(),
@@ -108,13 +109,48 @@ test('Layer 4 Ledger: SHA-256 block hash chaining and immutability', () => {
     license_status: 'PASSED',
     author_responses: [],
     raw_audit_results: {},
+    provenance: 'computed',
   });
 
-  assert.ok(newBlock.block_height > 4);
-  assert.ok(newBlock.sha256_hash.length > 20);
+  assert.equal(newBlock.block_height, 1);
+  assert.equal(newBlock.sha256_hash.length, 64);
 
   const verificationAfter = verifyLedgerChain();
   assert.equal(verificationAfter.isValid, true);
+  assert.equal(verificationAfter.verifiedBlocks, 1);
+
+  // Attempting to write a simulated verdict must be rejected
+  assert.throws(
+    () => {
+      writeVerdictToLedger({
+        claim_id: 'simulated_claim',
+        timestamp: new Date().toISOString(),
+        verdict: 'REPRODUCED',
+        title: 'Simulated Demo Claim',
+        verdict_statement: 'Simulated.',
+        domain_task: 'breast_transcriptomic_metastasis',
+        dataset_id: 'GSE176078',
+        scopeTested: [],
+        scopeNotTested: [],
+        universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
+        evidenceLinks: { claimSpecHash: '', auditResultsHash: '', ledgerRecordHash: '', datasetId: '', repositorySnapshot: '', rawLogUrl: '' },
+        tool_invocations: 1,
+        license_status: 'PASSED',
+        author_responses: [],
+        raw_audit_results: {},
+        provenance: 'simulated',
+      });
+    },
+    /Cannot commit simulated verdict/
+  );
+
+  // Tamper detection: modifying stored verdict causes verifyLedgerChain to fail
+  const records = getLedgerRecords();
+  records[0].verdict = 'FAILS_BASELINE';
+  const tamperedResult = verifyLedgerChain(records);
+  assert.equal(tamperedResult.isValid, false);
+  assert.equal(tamperedResult.brokenBlockIndex, 0);
+  assert.ok(tamperedResult.failureReason?.includes('Tamper detected'));
 });
 
 test('Layer 2 Orchestrator: Rule 2 terminates immediately when license is blocked', async () => {

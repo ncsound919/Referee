@@ -21,9 +21,9 @@ function createSeededRandom(seed: number) {
  * Guarantees that any calculated statistical float is finite.
  * If NaN or non-finite, returns defaultFallback and flags explicit refusal.
  */
-function safeFloat(val: number, defaultFallback: number): number {
+function safeFloat(val: number, fieldName = 'value'): number {
   if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
-    return defaultFallback;
+    throw new Error(`Non-finite or missing numerical value for ${fieldName}; never NaN or guessed.`);
   }
   return Number(val.toFixed(4));
 }
@@ -41,7 +41,14 @@ export function runRefereeTool(
   claimSpec: ClaimSpec,
   leakageDetected: boolean = false
 ): StatisticalRefereeResult {
-  const claimMetric = safeFloat(claimSpec.claimed_metric?.value, 0.5);
+  if (
+    claimSpec.claimed_metric?.value === undefined ||
+    claimSpec.claimed_metric?.value === null ||
+    !Number.isFinite(claimSpec.claimed_metric.value)
+  ) {
+    throw new Error('Claim metric value is missing or non-finite: cannot evaluate statistical referee.');
+  }
+  const claimMetric = safeFloat(claimSpec.claimed_metric.value, 'claimed_metric.value');
   const seed = 42;
   const rng = createSeededRandom(seed);
   const iterations = 1000;
@@ -68,11 +75,11 @@ export function runRefereeTool(
   const lowerIdx = Math.floor(iterations * 0.025);
   const upperIdx = Math.floor(iterations * 0.975);
 
-  const ciLower = safeFloat(bootstrapScores[lowerIdx], 0.45);
-  const ciUpper = safeFloat(bootstrapScores[upperIdx], 0.65);
+  const ciLower = safeFloat(bootstrapScores[lowerIdx], 'ciLower');
+  const ciUpper = safeFloat(bootstrapScores[upperIdx], 'ciUpper');
   const claimAucEstimate = safeFloat(
     bootstrapScores[Math.floor(iterations * 0.5)],
-    trueUnderlyingMean
+    'claimAucEstimate'
   );
 
   // Negative control experiment:
@@ -84,7 +91,7 @@ export function runRefereeTool(
   } else if (claimSpec.split_description?.toLowerCase().includes('random')) {
     negativeControlAgreement = 0.34;
   }
-  negativeControlAgreement = safeFloat(negativeControlAgreement, 0.2);
+  negativeControlAgreement = safeFloat(negativeControlAgreement, 'negativeControlAgreement');
 
   const negativeControlGatePassed = negativeControlAgreement <= 0.3;
 
@@ -95,9 +102,9 @@ export function runRefereeTool(
   let calIntercept = leakageDetected ? 0.28 : 0.03;
   let brierScore = leakageDetected ? 0.238 : 0.142;
 
-  calSlope = safeFloat(calSlope, 1.0);
-  calIntercept = safeFloat(calIntercept, 0.0);
-  brierScore = safeFloat(brierScore, 0.15);
+  calSlope = safeFloat(calSlope, 'calSlope');
+  calIntercept = safeFloat(calIntercept, 'calIntercept');
+  brierScore = safeFloat(brierScore, 'brierScore');
 
   // Calibration bins (10 probability bins from 0.05 to 0.95)
   const calibrationBins: CalibrationPoint[] = [];
@@ -155,14 +162,14 @@ export function runRefereeTool(
     decisionCurve.push({
       threshold: safeFloat(pt, 0.1),
       net_benefit_model: safeFloat(nbModel, 0),
-      net_benefit_treat_all: safeFloat(nbTreatAll, 0),
-      net_benefit_treat_none: nbTreatNone,
+      net_benefit_treat_all: safeFloat(nbTreatAll, 'nbTreatAll'),
+      net_benefit_treat_none: safeFloat(nbTreatNone, 'nbTreatNone'),
     });
   }
 
   // Two-sided p-value against null baseline of 0.50
   const zScore = (claimAucEstimate - 0.5) / stdError;
-  const pVal = safeFloat(Math.exp(-0.717 * zScore - 0.416 * zScore * zScore), 0.001);
+  const pVal = safeFloat(Math.exp(-0.717 * zScore - 0.416 * zScore * zScore), 'pVal');
 
   return {
     bootstrap_iterations: iterations,
@@ -178,5 +185,6 @@ export function runRefereeTool(
     calibration_curve: calibrationBins,
     decision_curve: decisionCurve,
     never_nan_enforced: true,
+    provenance: 'simulated',
   };
 }

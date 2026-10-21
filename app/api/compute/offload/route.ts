@@ -1,24 +1,40 @@
 import { NextResponse } from 'next/server';
-import { offloadToCloudflareWorker, runKaggleKernel } from '@/lib/integrations/offload';
+
+const ALLOWED_TARGETS = new Set(['tumortwin', 'cloudflare', 'kaggle']);
 
 export async function POST(req: Request) {
-  const { target, task } = await req.json();
-
   try {
+    const { target, task } = await req.json();
+
+    if (!target || !ALLOWED_TARGETS.has(target)) {
+      return NextResponse.json(
+        { error: `Invalid compute offload target '${target}'. Allowed: ${Array.from(ALLOWED_TARGETS).join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    if (!task || typeof task !== 'object') {
+      return NextResponse.json({ error: 'Valid task payload object is required' }, { status: 400 });
+    }
+
     if (target === 'tumortwin') {
-      // Direct call to FastAPI engine
-      const res = await fetch('http://localhost:8000/run_experiment', {
+      const engineUrl = process.env.ENGINE_URL || 'http://localhost:8000';
+      const res = await fetch(`${engineUrl}/run_experiment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task),
       });
+      if (!res.ok) {
+        return NextResponse.json({ error: `Engine returned HTTP ${res.status}` }, { status: res.status });
+      }
       const data = await res.json();
       return NextResponse.json({ result: data });
     } else {
-        // Placeholder/Stub
-        return NextResponse.json({ result: { status: 'queued' } });
+      // Cloudflare / Kaggle worker stub
+      return NextResponse.json({ result: { status: 'queued', target } });
     }
   } catch (error) {
-    return NextResponse.json({ error: 'Compute offload failed' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Compute offload failed', details: msg }, { status: 500 });
   }
 }

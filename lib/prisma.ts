@@ -105,7 +105,7 @@ export const prisma = {
       data: Omit<ExperienceCase, 'id'> & { id?: string };
     }): Promise<ExperienceCase> => {
       const record: ExperienceCase = {
-        id: data.id || `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: data.id || `exp_${Date.now()}_${experienceStore.length + 1}`,
         ...data,
       };
       experienceStore.push(record);

@@ -41,6 +41,9 @@ class Policy(BaseModel):
 
     seed: int = 42
     n_boot: int = Field(default=1000, ge=100)
+    n_perm: int = Field(default=999, ge=99)
+    ci_level: float = 0.95
+    nc_seed_offset: int = 1
     repro_tolerance: float = 0.02       # |claimed - reproduced| allowed regardless of CI
     min_eval_patients: int = 30
     min_patients_per_class: int = 10
@@ -51,6 +54,12 @@ class Policy(BaseModel):
     nc_margin: float = 0.05             # ... and the AUC differs from 0.5 by at least this much
     train_label: str = "train"
     test_label: str = "test"
+    split_aliases: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "train": ["train", "training", "trn"],
+            "test": ["test", "testing", "val", "validation", "holdout"],
+        }
+    )
 
 
 class TableError(ValueError):
@@ -62,18 +71,40 @@ def load_table(csv_text: str) -> pd.DataFrame:
         df = pd.read_csv(io.StringIO(csv_text), dtype={"patient_id": str, "sample_id": str})
     except Exception as exc:  # malformed CSV
         raise TableError(f"cannot parse CSV: {exc}") from exc
+
     for col in ("patient_id", "label"):
         if col not in df.columns:
             raise TableError(f"missing required column '{col}'")
-    if df["patient_id"].isna().any() or (df["patient_id"].str.strip() == "").any():
+
+    # Normalize patient IDs: strip whitespace
+    df["patient_id"] = df["patient_id"].astype(str).str.strip()
+    if df["patient_id"].isna().any() or (df["patient_id"] == "").any() or (df["patient_id"] == "nan").any():
         raise TableError("patient_id has empty values")
-    if not set(pd.unique(df["label"].dropna())) <= {0, 1}:
+
+    # Strict check on labels: reject NaNs
+    if df["label"].isna().any():
+        raise TableError("label has missing/NaN values")
+
+    unique_labels = set(pd.unique(df["label"]))
+    if not unique_labels <= {0, 1}:
         raise TableError("label must be 0 or 1")
+
+    # Strict check on split if present
+    if "split" in df.columns:
+        if df["split"].isna().any():
+            raise TableError("split column contains missing/NaN values")
+        df["split"] = df["split"].astype(str).str.strip()
+
     if "sample_id" not in df.columns:
         df["sample_id"] = [f"row{i}" for i in range(len(df))]
+    else:
+        df["sample_id"] = df["sample_id"].astype(str).str.strip()
+
     if df["sample_id"].duplicated().any():
         raise TableError("sample_id values must be unique")
+
     for c in df.columns:
         if c in ("score", "nc_score"):
             df[c] = pd.to_numeric(df[c], errors="coerce")
+
     return df

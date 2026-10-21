@@ -216,3 +216,96 @@ def test_api_audit_and_verify_roundtrip():
     bad["verdict"] = "LEAKAGE_DETECTED"
     assert client.post("/verify", json=bad).json() == {"valid": False}
     assert client.post("/audit", json={"claim": {"claim_id": "x", "claimed_auc": 1.7}, "csv_text": ""}).status_code == 422
+
+
+# ---------- Phase 1 Audit Hardening Tests ----------
+
+def test_patient_id_normalization_catches_whitespace_leak():
+    """Finding B2: Patient IDs 'P12' and '  P12  ' must be recognized as identical patient."""
+    df = table(100)
+    tr_p0 = df[df["split"] == "train"]["patient_id"].iloc[0]
+    te_target = df[df["split"] == "test"]["patient_id"].iloc[0]
+    df.loc[df["patient_id"] == te_target, "patient_id"] = f"  {tr_p0}  "
+    csv = df.to_csv(index=False)
+    r = audit_csv(csv, claim_for(df))
+    assert r["evidence"]["patient_overlap"]["shared_patients"] >= 1
+    assert r["verdict"] == "LEAKAGE_DETECTED"
+
+
+def test_nan_labels_are_strictly_rejected():
+    """Finding B3: NaN labels must not be silently accepted or counted as negatives."""
+    df = table(100)
+    df.loc[0, "label"] = np.nan
+    csv = df.to_csv(index=False)
+    with pytest.raises(TableError, match="label has missing/NaN values"):
+        load_table(csv)
+    r = audit_csv(csv, claim_for(df))
+    assert r["verdict"] == "UNVERIFIABLE"
+    assert any("label has missing/NaN values" in reason for reason in r["reasons"])
+
+
+def test_split_aliases_and_case_normalization():
+    """Finding B7: Cased splits 'Train'/'Test' and aliases 'training'/'val' must be normalized."""
+    df = table(100)
+    claim = claim_for(df)
+    df["split"] = df["split"].replace({"train": "Training", "test": "val"})
+    csv = df.to_csv(index=False)
+    r = audit_csv(csv, claim)
+    assert r["verdict"] == "REPRODUCED"
+
+
+def test_underpowered_table_with_leak_reports_leak_in_reasons():
+    """Finding B6: Leaky + underpowered tables must report the critical leakage finding in reasons."""
+    # Underpowered: only 5 patients
+    rng = np.random.default_rng(42)
+    rows = []
+    for p in range(5):
+        rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_tr", label=p % 2, split="train", score=0.6))
+        rows.append(dict(patient_id=f"P{p}", sample_id=f"P{p}_te", label=p % 2, split="test", score=0.7))
+    df = pd.DataFrame(rows)
+    csv = df.to_csv(index=False)
+    r = audit_csv(csv, ClaimSpec(claim_id="tiny_leaky", claimed_auc=0.70))
+    assert r["verdict"] == "UNVERIFIABLE"
+    assert any("appear in both train and test" in reason for reason in r["reasons"])
+    assert any("insufficient evaluation data" in reason for reason in r["reasons"])
+
+
+def test_eval_on_all_flags_training_row_inclusion():
+    """Finding B8: eval_on='all' must flag inclusion of training rows and not claim passed clean separation."""
+    df = table(100)
+    csv = df.to_csv(index=False)
+    claim = claim_for(df, eval_on="all")
+    r = audit_csv(csv, claim)
+    assert r["dimensions"]["data_integrity"] == "warning"
+    assert r["evidence"].get("eval_includes_training_rows") is True
+    assert any("eval_on='all' includes" in reason for reason in r["reasons"])
+
+
+def test_claimed_ci_disjoint_causes_non_reproduction():
+    """Finding B9: Wildly inconsistent claimed CIs must cause NOT_REPRODUCED."""
+    df = table(200)
+    csv = df.to_csv(index=False)
+    honest = claim_for(df)
+    # Claim high AUC with extremely tight, disjoint interval [0.95, 0.99]
+    disjoint_claim = ClaimSpec(
+        claim_id="c_disjoint",
+        claimed_auc=0.96,
+        claimed_auc_ci=(0.95, 0.99)
+    )
+    r = audit_csv(csv, disjoint_claim)
+    assert r["verdict"] == "NOT_REPRODUCED"
+    assert any("does not overlap reproduced interval" in reason for reason in r["reasons"])
+
+
+def test_api_run_experiment_validates_json_body_and_digest():
+    """Finding B13: /run_experiment accepts JSON body and verifies SHA-256 digest."""
+    client = TestClient(app)
+    bad_req = {
+        "engine_name": "tumortwin",
+        "snapshot_json": '{"engine":{"name":"tumortwin"}}',
+        "sha256": "wrong_hash",
+    }
+    r = client.post("/run_experiment", json=bad_req)
+    assert r.status_code == 400
+    assert "digest does not match" in r.text
+

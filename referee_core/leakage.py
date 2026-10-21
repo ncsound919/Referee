@@ -27,12 +27,19 @@ def patient_overlap(df: pd.DataFrame, policy: Policy) -> dict:
     if tr.empty or te.empty:
         return {"status": "not_assessable",
                 "reason": f"need rows labelled '{policy.train_label}' and '{policy.test_label}'"}
-    shared = set(tr["patient_id"]) & set(te["patient_id"])
-    dup_samples = set(tr["sample_id"]) & set(te["sample_id"])
-    te_in_train = te["patient_id"].isin(shared)
-    return {"status": "ok", "train_patients": int(tr["patient_id"].nunique()),
-            "test_patients": int(te["patient_id"].nunique()), "shared_patients": len(shared),
-            "test_patient_fraction": len(shared) / te["patient_id"].nunique(),
+
+    train_pats = set(tr["patient_id"].astype(str).str.strip())
+    test_pats = set(te["patient_id"].astype(str).str.strip())
+    shared = train_pats & test_pats
+
+    train_samples = set(tr["sample_id"].astype(str).str.strip())
+    test_samples = set(te["sample_id"].astype(str).str.strip())
+    dup_samples = train_samples & test_samples
+
+    te_in_train = te["patient_id"].astype(str).str.strip().isin(shared)
+    return {"status": "ok", "train_patients": len(train_pats),
+            "test_patients": len(test_pats), "shared_patients": len(shared),
+            "test_patient_fraction": len(shared) / len(test_pats),
             "test_sample_fraction": float(te_in_train.mean()),
             "shared_sample_ids": len(dup_samples)}
 
@@ -72,14 +79,24 @@ def nuisance_checks(df: pd.DataFrame, df_eval: pd.DataFrame, model_auc: Optional
         except ValueError as exc:
             out.append({**entry, "status": "not_assessable", "reason": str(exc)})
             continue
-        entry.update(nuisance_auc=a, method=how)
-        flagged = a >= policy.nuisance_warn_auc
-        dominant = (model_auc is not None and flagged and
-                    (a - 0.5) >= policy.shortcut_ratio * max(model_auc - 0.5, 1e-9))
+
+        effective_a = max(a, 1.0 - a)
+        entry.update(nuisance_auc=a, effective_auc=effective_a, method=how)
+        flagged = effective_a >= policy.nuisance_warn_auc
+
+        # Model at chance (AUC <= 0.55) must not be flagged critical simply because dataset has batch structure
+        model_above_chance = model_auc is not None and (model_auc - 0.5) >= 0.05
+        dominant = (
+            model_above_chance and
+            flagged and
+            (effective_a - 0.5) >= policy.shortcut_ratio * (model_auc - 0.5)
+        )
         entry["status"] = "critical" if dominant else ("warning" if flagged else "ok")
         if dominant:
-            entry["reason"] = (f"covariate alone reaches AUC {a:.3f}, at least "
-                               f"{policy.shortcut_ratio:.0%} of the model's above-chance AUC")
+            entry["reason"] = (f"covariate alone reaches effective AUC {effective_a:.3f}, at least "
+                               f"{policy.shortcut_ratio:.0%} of the model's above-chance AUC ({model_auc:.3f})")
+        elif flagged:
+            entry["reason"] = f"covariate reaches effective AUC {effective_a:.3f} >= {policy.nuisance_warn_auc}"
         out.append(entry)
     return out
 

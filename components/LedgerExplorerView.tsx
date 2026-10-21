@@ -179,9 +179,22 @@ export function LedgerExplorerView({
 
       {/* Ledger Block List */}
       <div className="space-y-3">
-        {filteredRecords.map((record) => {
-          const isExpanded = expandedRecordId === record.verdict_id;
-          const isRebuttalOpen = activeRebuttalVerdictId === record.verdict_id;
+        {records.length === 0 ? (
+          <div className="text-center py-12 px-4 rounded-xl border border-slate-800 bg-slate-950/40 text-slate-400 font-mono text-xs space-y-2">
+            <Database className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="font-semibold text-slate-300">Public Evidence Ledger is Clean & Empty</p>
+            <p className="text-slate-500 max-w-md mx-auto">
+              No audit records have been committed to the public ledger yet. Only verified COMPUTED verdicts can be permanently committed.
+            </p>
+          </div>
+        ) : filteredRecords.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 font-mono text-xs">
+            No ledger records match the current filter criteria.
+          </div>
+        ) : (
+          filteredRecords.map((record) => {
+            const isExpanded = expandedRecordId === record.verdict_id;
+            const isRebuttalOpen = activeRebuttalVerdictId === record.verdict_id;
 
           return (
             <div
@@ -194,6 +207,11 @@ export function LedgerExplorerView({
                   <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 font-bold">
                     Block #{record.block_height}
                   </span>
+                  {(record.synthetic || record.provenance === 'simulated') && (
+                    <span className="px-2 py-0.5 rounded border border-amber-600/50 bg-amber-950/40 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+                      Demo / Synthetic
+                    </span>
+                  )}
                   <span
                     className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${getVerdictBadge(
                       record.verdict
@@ -348,7 +366,7 @@ export function LedgerExplorerView({
               )}
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );

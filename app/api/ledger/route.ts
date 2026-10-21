@@ -34,11 +34,25 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { verdict_id, author_name, response_text, rebuttal_url } = body;
+    const { verdict_id, author_name, response_text, rebuttal_url, author_email } = body;
 
     if (!verdict_id || !author_name || !response_text) {
       return NextResponse.json(
         { error: 'verdict_id, author_name, and response_text are required' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof author_name !== 'string' || author_name.trim().length < 2) {
+      return NextResponse.json(
+        { error: 'Valid author_name of at least 2 characters is required' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof response_text !== 'string' || response_text.trim().length < 10) {
+      return NextResponse.json(
+        { error: 'Detailed author response text (min 10 characters) is required' },
         { status: 400 }
       );
     }

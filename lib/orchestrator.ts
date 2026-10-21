@@ -171,6 +171,7 @@ export async function executeAuditPipeline(
       raw_audit_results: {
         license: licenseResult,
       },
+      provenance: 'computed',
     });
 
     return {
@@ -367,66 +368,122 @@ export async function executeAuditPipeline(
   // ==========================================
   // STEP 6: Write to Immutable Evidence Ledger (Rule 5)
   // ==========================================
-  recordStep(
-    'Layer 4: Ledger',
-    'writeVerdictToLedger',
-    `Verdict: ${finalVerdict}, Block Height: next`,
-    'RUNNING',
-    'Computing cryptographic SHA-256 block hash and appending immutable record to ledger...'
-  );
+  const isSimulated =
+    baselineResult.provenance === 'simulated' ||
+    leakageResult.provenance === 'simulated' ||
+    refereeResult.provenance === 'simulated';
 
-  const verdictRecord = writeVerdictToLedger({
-    claim_id: claimSpec.claim_id,
-    timestamp: new Date().toISOString(),
-    verdict: finalVerdict,
-    title: claimSpec.title,
-    verdict_statement: verdictStatement,
-    domain_task: claimSpec.domain_task,
-    dataset_id: claimSpec.dataset_id,
-    scopeTested: [
-      'Deterministic License Rights Gate',
-      'Fixed Domain-Aware Baseline Comparison (GLMNET/RF/XGBoost/Cox)',
-      'Domain-Specific Leakage Detection (Patient, Timepoint, Batch, Nuisance)',
-      '1,000-Cluster Bootstrap Distribution & 95% CI',
-      '0.30 Negative-Control Gate',
-      'Brier Calibration Slope & Intercept',
-      'Decision Curve Analysis (Clinical Net Benefit)',
-    ],
-    scopeNotTested: [
-      'Direct wet-lab molecular mechanism',
-      'Prospective interventional clinical trial efficacy',
-      'Off-label pharmacological prescription validity',
-      'Demographic fairness across untested global populations',
-    ],
-    universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
-    evidenceLinks: {
-      claimSpecHash: syncHash(JSON.stringify(claimSpec)),
-      auditResultsHash: syncHash(JSON.stringify(auditResults)),
-      ledgerRecordHash: '',
-      datasetId: claimSpec.dataset_id,
-      repositorySnapshot: claimSpec.repository_url,
-      rawLogUrl: `/audit-logs/${claimSpec.claim_id}.json`,
-    },
-    tool_invocations: toolCallCount,
-    license_status: licenseResult.status,
-    baseline_margin: baselineResult.margin,
-    leakage_summary: leakageResult.violations.length > 0 ? leakageResult.violations[0].description : undefined,
-    author_responses: [],
-    raw_audit_results: {
-      license: licenseResult,
-      baselines: baselineResult,
-      leakage: leakageResult,
-      referee: refereeResult,
-    },
-  });
+  let verdictRecord: VerdictRecord | undefined;
 
-  recordStep(
-    'Layer 4: Ledger',
-    'writeVerdictToLedger',
-    `Block #${verdictRecord.block_height} (Hash: ${verdictRecord.sha256_hash.slice(0, 16)}...)`,
-    'SUCCESS',
-    `Verdict successfully anchored in immutable ledger. Verdict: ${finalVerdict}.`
-  );
+  if (!isSimulated) {
+    recordStep(
+      'Layer 4: Ledger',
+      'writeVerdictToLedger',
+      `Verdict: ${finalVerdict}, Block Height: next`,
+      'RUNNING',
+      'Computing cryptographic SHA-256 block hash and appending immutable record to ledger...'
+    );
+
+    verdictRecord = writeVerdictToLedger({
+      claim_id: claimSpec.claim_id,
+      timestamp: new Date().toISOString(),
+      verdict: finalVerdict,
+      title: claimSpec.title,
+      verdict_statement: verdictStatement,
+      domain_task: claimSpec.domain_task,
+      dataset_id: claimSpec.dataset_id,
+      scopeTested: [
+        'Deterministic License Rights Gate',
+        'Fixed Domain-Aware Baseline Comparison (GLMNET/RF/XGBoost/Cox)',
+        'Domain-Specific Leakage Detection (Patient, Timepoint, Batch, Nuisance)',
+        '1,000-Cluster Bootstrap Distribution & 95% CI',
+        '0.30 Negative-Control Gate',
+        'Brier Calibration Slope & Intercept',
+        'Decision Curve Analysis (Clinical Net Benefit)',
+      ],
+      scopeNotTested: [
+        'Direct wet-lab molecular mechanism',
+        'Prospective interventional clinical trial efficacy',
+        'Off-label pharmacological prescription validity',
+        'Demographic fairness across untested global populations',
+      ],
+      universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
+      evidenceLinks: {
+        claimSpecHash: syncHash(JSON.stringify(claimSpec)),
+        auditResultsHash: syncHash(JSON.stringify(auditResults)),
+        ledgerRecordHash: '',
+        datasetId: claimSpec.dataset_id,
+        repositorySnapshot: claimSpec.repository_url,
+        rawLogUrl: `/audit-logs/${claimSpec.claim_id}.json`,
+      },
+      tool_invocations: toolCallCount,
+      license_status: licenseResult.status,
+      baseline_margin: baselineResult.margin,
+      leakage_summary: leakageResult.violations.length > 0 ? leakageResult.violations[0].description : undefined,
+      author_responses: [],
+      raw_audit_results: {
+        license: licenseResult,
+        baselines: baselineResult,
+        leakage: leakageResult,
+        referee: refereeResult,
+      },
+      provenance: 'computed',
+    });
+
+    recordStep(
+      'Layer 4: Ledger',
+      'writeVerdictToLedger',
+      `Block #${verdictRecord.block_height} (Hash: ${verdictRecord.sha256_hash.slice(0, 16)}...)`,
+      'SUCCESS',
+      `Verdict successfully anchored in immutable ledger. Verdict: ${finalVerdict}.`
+    );
+  } else {
+    recordStep(
+      'Layer 4: Ledger',
+      'writeVerdictToLedger',
+      'SIMULATED_DEMO',
+      'SUCCESS',
+      'Notice: Audit executed with simulated heuristics. Public ledger commit withheld to prevent unverified record entry.'
+    );
+
+    verdictRecord = {
+      verdict_id: `vrd_sim_${Date.now()}`,
+      claim_id: claimSpec.claim_id,
+      timestamp: new Date().toISOString(),
+      block_height: 0,
+      previous_block_hash: 'SIMULATED_NOT_COMMITTED',
+      sha256_hash: syncHash(JSON.stringify({ claim_id: claimSpec.claim_id, simulated: true })),
+      verdict: finalVerdict,
+      title: claimSpec.title,
+      verdict_statement: `[SIMULATED DEMO - NOT COMMITTED TO EVIDENCE LEDGER] ${verdictStatement}`,
+      domain_task: claimSpec.domain_task,
+      dataset_id: claimSpec.dataset_id,
+      scopeTested: ['Simulated Heuristic Evaluation'],
+      scopeNotTested: ['Full prediction table audit against referee-core engine'],
+      universalClaimLimit: UNIVERSAL_CLAIM_LIMIT,
+      evidenceLinks: {
+        claimSpecHash: syncHash(JSON.stringify(claimSpec)),
+        auditResultsHash: syncHash(JSON.stringify(auditResults)),
+        ledgerRecordHash: 'SIMULATED',
+        datasetId: claimSpec.dataset_id,
+        repositorySnapshot: claimSpec.repository_url,
+        rawLogUrl: `/audit-logs/${claimSpec.claim_id}.json`,
+      },
+      tool_invocations: toolCallCount,
+      license_status: licenseResult.status,
+      baseline_margin: baselineResult.margin,
+      leakage_summary: leakageResult.violations.length > 0 ? leakageResult.violations[0].description : undefined,
+      author_responses: [],
+      raw_audit_results: {
+        license: licenseResult,
+        baselines: baselineResult,
+        leakage: leakageResult,
+        referee: refereeResult,
+      },
+      provenance: 'simulated',
+      synthetic: true,
+    };
+  }
 
   return {
     success: true,
@@ -509,52 +566,37 @@ export async function runRecursiveRepairLoop(
     let repairType: RepairProposal['repair_type'] = 'LEAKAGE_FIX';
     let proposedSkills: string[] = [];
 
-    // Step A: Determine proposed skills & parameters for this iteration
+    // Step A: Determine proposed skills & recommendations for this iteration
     if (currentVerdict === 'LEAKAGE_DETECTED') {
       repairType = 'LEAKAGE_FIX';
       if (currentSpec.domain_task === 'breast_pathology_lymph_node') {
         proposedSkills = ['split_by_patient_level', 'run_glmnet_baseline', 'run_statistical_referee'];
-        actionTaken = 'LEAKAGE_FIX: Enforced patient-level slide grouping in train/test partitioning';
-        paramAdjusted = 'split_description: GroupKFold by patient_id';
-        currentSpec.split_description =
-          'Strict patient-stratified split using GroupKFold(patient_id). Zero slides from the same patient co-occur in train and test.';
-        notes = 'Applied learned principle (bp_009): Eliminated patient slide cross-contamination across biopsies.';
+        actionTaken = 'LEAKAGE_RECOMMENDATION: Enforce patient-level slide grouping in train/test partitioning';
+        paramAdjusted = 'Recommendation: Partition by GroupKFold(patient_id)';
+        notes = 'Applied learned principle (bp_009): Recommendation to eliminate patient slide cross-contamination across biopsies.';
       } else if (currentSpec.domain_task === 'neuro_oncology_pseudoprogression') {
         proposedSkills = ['split_longitudinal_timepoint_held_out', 'check_scanner_nuisance_kernel', 'run_statistical_referee'];
-        actionTaken = 'LEAKAGE_FIX & FEATURE_RESTRICTION: Enforced patient-held-out longitudinal split and multi-scanner debiasing';
-        paramAdjusted = 'split_description: Patient-held-out; imaging_metadata: multi-scanner harmonization';
-        currentSpec.split_description =
-          'Patient-held-out longitudinal partition. Serial scans from the same subject remain within a single fold. Multi-scanner intensity normalization applied.';
-        if (currentSpec.imaging_metadata) {
-          currentSpec.imaging_metadata.scanner_vendor = 'Multi-Scanner Harmonized (Siemens, GE, Philips)';
-          currentSpec.imaging_metadata.reconstruction_kernel = 'ComBat-Harmonized MRI';
-        }
-        notes = 'Applied learned principle (bp_017, bp_023): Neutralized serial timepoint leakage and scanner acquisition bias.';
+        actionTaken = 'LEAKAGE_RECOMMENDATION & FEATURE_RESTRICTION: Recommend patient-held-out longitudinal split and multi-scanner debiasing';
+        paramAdjusted = 'Recommendation: Patient-held-out longitudinal split; multi-scanner intensity harmonization';
+        notes = 'Applied learned principle (bp_017, bp_023): Recommendation to neutralize serial timepoint leakage and scanner acquisition bias.';
       } else {
         proposedSkills = ['check_batch_confound', 'combat_batch_harmonization', 'run_clinical_cox_baseline'];
-        actionTaken = 'LEAKAGE_FIX: Applied ComBat batch harmonization across sequencing runs';
-        paramAdjusted = 'split_description: ComBat batch normalization';
-        currentSpec.split_description =
-          'Patient-stratified test split with ComBat empirical Bayes batch harmonization across sequencing plates.';
-        notes = 'Applied learned principle (bp_004): Removed plate/batch confounding.';
+        actionTaken = 'LEAKAGE_RECOMMENDATION: Apply ComBat batch harmonization across sequencing runs';
+        paramAdjusted = 'Recommendation: ComBat batch normalization';
+        notes = 'Applied learned principle (bp_004): Recommendation to remove plate/batch confounding.';
       }
     } else if (currentVerdict === 'FAILS_BASELINE') {
       repairType = 'BASELINE_ALIGNMENT';
       proposedSkills = ['multimodal_clinical_fusion', 'run_clinical_cox_baseline', 'run_statistical_referee'];
-      actionTaken = 'BASELINE_ALIGNMENT: Integrated clinical covariate multimodal fusion (Age, Stage, Subtype)';
-      paramAdjusted = 'Model architecture: Multimodal fusion with clinical covariates';
-      const boosted = Math.min(0.82, Number((currentSpec.claimed_metric.value + 0.035).toFixed(3)));
-      currentSpec.claimed_metric.value = boosted;
-      notes = `Multimodal clinical integration enhanced generalizable signal from ${Number((boosted - 0.035).toFixed(3))} to ${boosted}.`;
+      actionTaken = 'BASELINE_RECOMMENDATION: Propose clinical covariate multimodal fusion (Age, Stage, Subtype)';
+      paramAdjusted = 'Recommendation: Multimodal fusion with clinical covariates';
+      notes = `Multimodal clinical integration recommended to evaluate incremental predictive benefit over clinical factors alone.`;
     } else if (currentVerdict === 'UNVERIFIABLE') {
       repairType = 'LEAKAGE_FIX';
       proposedSkills = ['split_by_patient_level', 'run_statistical_referee'];
-      actionTaken = 'LEAKAGE_FIX: Supplied verified institutional split metadata from author correspondence';
-      paramAdjusted = 'split_description: Patient-stratified 5-fold cross-validation';
-      currentSpec.split_description =
-        'Patient-stratified 5-fold cross-validation with GroupKFold on patient_id.';
-      currentSpec.missing_fields = [];
-      notes = 'Replaced missing split description with verified protocol.';
+      actionTaken = 'PROTOCOL_RECOMMENDATION: Solicit verified institutional split metadata and patient grouping protocol';
+      paramAdjusted = 'Requirement: Explicit patient-stratified split specification';
+      notes = 'Missing split metadata requires verified author protocol or patient grouping specification.';
     }
 
     // Handle simulation overrides if testing MEV circuit breakers
@@ -596,7 +638,7 @@ export async function runRecursiveRepairLoop(
         action_taken: `HALTED BY JEVONS MEV GATEKEEPER: ${mevEvaluation.reason}`,
         parameter_adjusted: 'Execution aborted (Marginal Evidence Value < 0.15 threshold)',
         previous_verdict: prevVerdict,
-        new_verdict: 'FAILS_BASELINE',
+        new_verdict: prevVerdict,
         claim_auc: currentSpec.claimed_metric.value,
         baseline_auc: initialRun.auditResults.baseline_result?.best_baseline_auc || 0.65,
         leakage_detected: initialRun.auditResults.leakage_result?.leakage_detected || false,
@@ -610,20 +652,16 @@ export async function runRecursiveRepairLoop(
       break;
     }
 
-    // Re-audit with updated configuration (executed by deterministic engine, not LLM code)
-    const reaudit = await executeAuditPipeline(currentSpec);
-    finalRecord = reaudit.verdictRecord;
-    currentVerdict = reaudit.verdictRecord?.verdict || 'FAILS_BASELINE';
-
+    // Record recommendation iteration without mutating claim or laundering verdict
     history.push({
       iteration: iter,
       action_taken: actionTaken,
       parameter_adjusted: paramAdjusted,
       previous_verdict: prevVerdict,
-      new_verdict: currentVerdict,
+      new_verdict: prevVerdict,
       claim_auc: currentSpec.claimed_metric.value,
-      baseline_auc: reaudit.auditResults.baseline_result?.best_baseline_auc || 0.65,
-      leakage_detected: reaudit.auditResults.leakage_result?.leakage_detected || false,
+      baseline_auc: initialRun.auditResults.baseline_result?.best_baseline_auc || 0.65,
+      leakage_detected: initialRun.auditResults.leakage_result?.leakage_detected || false,
       notes,
       mev: mevEvaluation,
     });
@@ -631,14 +669,6 @@ export async function runRecursiveRepairLoop(
     // Update hashes for subsequent redundancy checks
     previousPipelineHash = mevEvaluation.pipelineHash;
     previousSkills = [...proposedSkills];
-
-    if (currentVerdict === 'REPRODUCED') {
-      // Successful repair: reward the guiding principle
-      if (guidingPrincipleId) {
-        updatePrincipleUtility(guidingPrincipleId, 0.05);
-      }
-      break;
-    }
   }
 
   // If iteration cap reached without reproduction: claim is marked IRREPARABLE_WITHIN_BUDGET
