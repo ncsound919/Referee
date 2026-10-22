@@ -53,6 +53,42 @@ test('safeEqual compares equal strings and rejects different ones', () => {
   assert.equal(safeEqual('', ''), true);
 });
 
+test('the engine key is not an operator credential', async () => {
+  // REFEREE_API_KEY is also held by the Concordance website, which uses it to
+  // call the deterministic engine. It must not unlock the operator console or
+  // its evidence ledger.
+  //
+  // With no operator secret configured at all, the route is closed with 503.
+  await withEnv(
+    { INTERNAL_API_KEY: undefined, REFEREE_INTERNAL_KEY: undefined, REFEREE_API_KEY: 'engine-key', NODE_ENV: 'production' },
+    async () => {
+      const res = await requireOperator(
+        new Request('http://localhost/api/ledger', { headers: { 'x-api-key': 'engine-key' } })
+      );
+      assert.ok(res, 'expected the engine key to be rejected');
+      assert.notEqual(res.status, 200);
+      assert.equal(res.status, 503);
+    }
+  );
+
+  // And with an operator secret configured, the engine key is still not it.
+  await withEnv(
+    { INTERNAL_API_KEY: 'operator-key', REFEREE_INTERNAL_KEY: undefined, REFEREE_API_KEY: 'engine-key', NODE_ENV: 'production' },
+    async () => {
+      const res = await requireOperator(
+        new Request('http://localhost/api/ledger', { headers: { 'x-api-key': 'engine-key' } })
+      );
+      assert.ok(res, 'expected the engine key to be rejected');
+      assert.equal(res.status, 401);
+
+      const ok = await requireOperator(
+        new Request('http://localhost/api/ledger', { headers: { 'x-api-key': 'operator-key' } })
+      );
+      assert.equal(ok, null);
+    }
+  );
+});
+
 test('requireOperator rejects an unauthenticated request in production', async () => {
   await withEnv({ INTERNAL_API_KEY: 'secret-key', REFEREE_INTERNAL_KEY: undefined, REFEREE_API_KEY: undefined, NODE_ENV: 'production' }, async () => {
     const res = await requireOperator(new Request('http://localhost/api/ledger'));

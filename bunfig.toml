@@ -1,0 +1,8 @@
+# Bun configuration for the referee.
+#
+# The preload removes the operator credential from the environment before the
+# test files run: Bun loads `.env` automatically, and the suite exercises the
+# routes without a credential (the same way tests/conftest.py opts the Python
+# service into development mode).
+[test]
+preload = ["./tests/setup.ts"]
