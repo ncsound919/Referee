@@ -39,3 +39,7 @@ Thumbs.db
 *.tfstate.*
 *.tfstate.backup
 .terraform.lock.hcl
+# Variable files carry the engine key. Commit *.tfvars.example instead.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example

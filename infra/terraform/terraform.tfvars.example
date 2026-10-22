@@ -1,0 +1,18 @@
+# Example Terraform variables for the referee deployment.
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored because
+# it carries the engine key.
+
+# The key the referee-core service requires. The service fails closed (503 on
+# every route except /health) when this is empty, so it must be set.
+referee_api_key = ""
+
+# ACM certificate for the ALB's HTTPS listener, in the same region as the ALB.
+#
+# Leaving this empty means the ALB only has an HTTP listener, which is not
+# acceptable for a release: the engine key travels in cleartext between the
+# Concordance website and the engine, and the operator console would be
+# served over plain HTTP.
+#
+# Apply it with:
+#   terraform apply -var="acm_certificate_arn=arn:aws:acm:us-east-1:...:certificate/..."
+acm_certificate_arn = ""

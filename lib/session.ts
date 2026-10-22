@@ -17,18 +17,19 @@ export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const encoder = new TextEncoder();
 
 /**
- * The single secret behind both API-key auth and session cookies.
+ * The secret that authorises the operator console.
+ *
+ * Deliberately **not** `REFEREE_API_KEY`: that key is also held by the
+ * Concordance website, which uses it to call the deterministic engine. If it
+ * unlocked the console as well, a compromise of the website would be a
+ * compromise of the referee's evidence ledger. The engine key is presented
+ * separately, by `lib/integrations/referee-core-client.ts`.
  *
  * Returns an empty string when nothing is configured, which callers must
  * treat as "no credential exists" rather than "any credential is valid".
  */
 export function operatorSecret(): string {
-  return (
-    process.env.INTERNAL_API_KEY ||
-    process.env.REFEREE_INTERNAL_KEY ||
-    process.env.REFEREE_API_KEY ||
-    ''
-  );
+  return process.env.INTERNAL_API_KEY || process.env.REFEREE_INTERNAL_KEY || '';
 }
 
 function toBase64Url(bytes: Uint8Array): string {

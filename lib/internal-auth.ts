@@ -25,7 +25,6 @@ import {
 export function configuredSecret(): string {
   return operatorSecret();
 }
-
 /** True when this build must not run any route without a configured secret. */
 export function isProductionBuild(): boolean {
   return process.env.NODE_ENV === 'production';

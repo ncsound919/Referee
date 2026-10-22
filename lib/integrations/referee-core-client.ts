@@ -142,7 +142,10 @@ export class RefereeCoreClient {
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...coreAuthHeaders(),
+        },
         body: JSON.stringify(body),
       });
     } catch (err) {
@@ -154,6 +157,21 @@ export class RefereeCoreClient {
     }
     return res.json();
   }
+}
+
+/**
+ * The key this service presents to the deterministic engine.
+ *
+ * The engine fails closed when `REFEREE_API_KEY` is set, so the caller has to
+ * present it. This is a *different* secret from the operator key that guards
+ * this web layer (`INTERNAL_API_KEY`): the engine key is also held by the
+ * Concordance website, and it must not be enough to reach the operator
+ * console and its evidence ledger.
+ */
+function coreAuthHeaders(): Record<string, string> {
+  const key = process.env.REFEREE_CORE_KEY || process.env.REFEREE_API_KEY;
+  if (!key) return {};
+  return { 'x-referee-key': key };
 }
 
 /**
