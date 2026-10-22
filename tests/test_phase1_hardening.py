@@ -33,12 +33,12 @@ import numpy as np
 import pandas as pd
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from pydantic import ValidationError
 
 from referee_core import audit as audit_mod
 from referee_core import leakage
 from referee_core.audit import VERDICTS, audit_csv, canonical, verify_report
 from referee_core.schema import NUISANCE_COLUMNS, ClaimSpec, Policy, TableError, load_table
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -139,14 +139,14 @@ def test_policy_defaults_are_complete_and_pinned():
 
 def test_policy_rejects_unknown_fields():
     """A typo in a policy must fail loudly rather than being ignored."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Policy(n_boots=10)
 
 
 def test_policy_enforces_its_minimum_sample_sizes():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Policy(n_boot=99)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Policy(n_perm=98)
 
 

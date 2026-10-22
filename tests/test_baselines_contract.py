@@ -55,10 +55,10 @@ def _to_csv(df: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 
 def test_reserved_columns_are_the_documented_set():
-    assert baselines.RESERVED == {
+    assert {
         "patient_id", "sample_id", "label", "split", "score", "nc_score",
         "batch", "site", "center", "scanner", "plate",
-    }
+    } == baselines.RESERVED
 
 
 def test_the_models_own_predictions_are_not_a_baseline_feature():

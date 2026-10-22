@@ -31,7 +31,7 @@ async function withFetch<T>(
     const record = { url: String(input), init: init ?? {} };
     captured.push(record);
     return handler(record);
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     return await fn();
   } finally {
@@ -99,7 +99,7 @@ test('a trailing slash is stripped from the base url', async () => {
     globalThis.fetch = (async (input: any) => {
       seen = String(input);
       return jsonResponse({ valid: true });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       await new RefereeCoreClient('http://core.invalid/').verify({ report: {} });
     } finally {
@@ -122,7 +122,7 @@ test('audit normalises the claim into the core schema', async () => {
   globalThis.fetch = (async (_input: any, init: any) => {
     body = JSON.parse(init.body);
     return jsonResponse({ verdict: 'REPRODUCED', dimensions: {}, evidence: {} });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await client.audit({ claim_id: 'c1', title: 'T', claimed_auc: 0.8 }, 'patient_id,label\n');
   } finally {
@@ -144,7 +144,7 @@ test('audit takes the claimed auc from a nested claimed_metric when there is no 
   globalThis.fetch = (async (_input: any, init: any) => {
     body = JSON.parse(init.body);
     return jsonResponse({ verdict: 'REPRODUCED', dimensions: {}, evidence: {} });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await client.audit(
       { claim_id: 'c1', claimed_metric: { value: 0.77 } } as any,
@@ -163,7 +163,7 @@ test('audit passes a policy through when one is given', async () => {
   globalThis.fetch = (async (_input: any, init: any) => {
     body = JSON.parse(init.body);
     return jsonResponse({ verdict: 'REPRODUCED', dimensions: {}, evidence: {} });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await client.audit({ claim_id: 'c1', claimed_auc: 0.8 }, 'csv', { seed: 7 });
   } finally {
@@ -179,7 +179,7 @@ test('verify includes the csv only when one is supplied', async () => {
   globalThis.fetch = (async (_input: any, init: any) => {
     bodies.push(JSON.parse(init.body));
     return jsonResponse({ valid: true });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await client.verify({ report: { a: 1 } });
     await client.verify({ report: { a: 1 } }, 'csv');
@@ -197,7 +197,7 @@ test('run_experiment sends the engine name, snapshot and digest', async () => {
   globalThis.fetch = (async (_input: any, init: any) => {
     body = JSON.parse(init.body);
     return jsonResponse({ results: [] });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await client.runExperiment('tumortwin', '{"engine":{}}', 'a'.repeat(64));
   } finally {
@@ -222,7 +222,7 @@ test('the engine key is presented as x-referee-key', async () => {
     globalThis.fetch = (async (_input: any, init: any) => {
       headers = init.headers;
       return jsonResponse({ valid: true });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       await client.verify({ report: {} });
     } finally {
@@ -247,7 +247,7 @@ test('the engine key falls back to REFEREE_API_KEY', async () => {
     globalThis.fetch = (async (_input: any, init: any) => {
       headers = init.headers;
       return jsonResponse({ valid: true });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       await client.verify({ report: {} });
     } finally {
@@ -274,7 +274,7 @@ test('no key means no credential header at all', async () => {
     globalThis.fetch = (async (_input: any, init: any) => {
       headers = init.headers;
       return jsonResponse({ valid: true });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       await client.verify({ report: {} });
     } finally {
@@ -296,7 +296,7 @@ test('an unreachable engine raises rather than returning a fallback', async () =
   const original = globalThis.fetch;
   globalThis.fetch = (async () => {
     throw new Error('ECONNREFUSED');
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   try {
     await assert.rejects(() => client.verify({ report: {} }), RefereeCoreUnavailableError);
   } finally {
@@ -307,7 +307,7 @@ test('an unreachable engine raises rather than returning a fallback', async () =
 test('an error status from the engine is surfaced with its status code', async () => {
   const client = new RefereeCoreClient('http://core.invalid');
   const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response('nope', { status: 503 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
   try {
     await assert.rejects(
       () => client.verify({ report: {} }),

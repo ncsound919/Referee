@@ -10,6 +10,7 @@
  * verdict. These tests pin every one of those refusals.
  */
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import type { NextRequest } from 'next/server';
 
 import { GET as healthGet } from '../app/api/health/route';
 import { POST as sessionPost, DELETE as sessionDelete } from '../app/api/session/route';
@@ -36,12 +37,14 @@ async function withEnv<T>(
   }
 }
 
-function jsonRequest(body: unknown, url = 'http://localhost/api/audit'): Request {
+function jsonRequest(body: unknown, url = 'http://localhost/api/audit'): NextRequest {
+  // The route handlers only read the Request surface; NextRequest adds getters
+  // that a unit-test request does not need.
   return new Request(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }) as unknown as NextRequest;
 }
 
 // ---------------------------------------------------------------------------

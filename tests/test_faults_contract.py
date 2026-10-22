@@ -20,8 +20,7 @@ import json
 import pytest
 
 from referee_core import faults
-from referee_core.cli import main
-
+from referee_core.cli import app, main
 
 # ---------------------------------------------------------------------------
 # The scenario table
@@ -214,7 +213,7 @@ def test_the_audit_command_accepts_a_policy_file(tmp_path, capsys):
 def test_the_audit_command_fails_on_a_missing_csv(tmp_path):
     claim_path = tmp_path / "claim.json"
     claim_path.write_text(json.dumps({"claim_id": "c", "claimed_auc": 0.8}), encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(FileNotFoundError):
         main(["audit", str(tmp_path / "absent.csv"), str(claim_path)])
 
 
@@ -223,10 +222,17 @@ def test_the_audit_command_fails_on_a_malformed_claim(tmp_path):
     csv_path.write_text("patient_id,label,score,split\nP1,1,0.9,test\n", encoding="utf-8")
     claim_path = tmp_path / "claim.json"
     claim_path.write_text("{not json", encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(json.JSONDecodeError):
         main(["audit", str(csv_path), str(claim_path)])
 
 
 def test_an_unknown_subcommand_is_refused():
-    with pytest.raises(Exception):
-        main(["invent-a-command"])
+    # A bad command is refused by the argument parser, which raises inside
+    # typer's vendored click. CliRunner is the public API for exercising a
+    # typer app and handles that hierarchy for us.
+    from typer.testing import CliRunner
+
+    result = CliRunner().invoke(app, ["invent-a-command"])
+
+    assert result.exit_code != 0
+    assert "invent-a-command" in result.output

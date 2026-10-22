@@ -15,6 +15,7 @@ import hashlib
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from referee_core.engine import (
     ArtifactRef,
@@ -29,7 +30,6 @@ from referee_core.engine import (
     verify_artifact,
 )
 from referee_core.engine.tumortwin_adapter import TumorTwinAdapter
-
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -196,7 +196,7 @@ def test_the_hash_mismatch_message_names_both_digests(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_an_artifact_digest_must_be_a_lowercase_sha256_hex():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ArtifactRef(
             artifact_id="a1",
             path="output.json",
@@ -208,12 +208,12 @@ def test_an_artifact_digest_must_be_a_lowercase_sha256_hex():
 
 def test_an_artifact_is_frozen():
     artifact = _artifact("output.json", "0" * 64)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         artifact.path = "other.json"
 
 
 def test_a_manifest_rejects_an_unknown_field():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RunManifest(
             experiment_id="exp-1",
             protocol_id="proto-1",
@@ -225,7 +225,7 @@ def test_a_manifest_rejects_an_unknown_field():
 
 
 def test_a_manifest_rejects_an_unknown_schema_version():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RunManifest(
             schema_version="2.0",
             experiment_id="exp-1",
@@ -237,12 +237,12 @@ def test_a_manifest_rejects_an_unknown_schema_version():
 
 
 def test_an_engine_name_outside_the_allow_list_is_refused():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EngineSpec(name="not-an-engine", version="1.0")
 
 
 def test_a_negative_seed_is_refused():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RunManifest(
             experiment_id="exp-1",
             protocol_id="proto-1",
