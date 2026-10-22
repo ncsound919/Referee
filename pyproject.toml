@@ -10,7 +10,7 @@ dependencies = ["numpy", "scipy", "pandas", "scikit-learn", "pydantic>=2", "fast
 # same linter the local gate uses. It is pinned to a minor series because ruff
 # changes its default rule set between releases and an unpinned linter would
 # make the CI gate fail on an unrelated ruff upgrade.
-dev = ["pytest", "httpx", "ruff>=0.17.1,<0.18"]
+dev = ["pytest", "pytest-cov", "httpx", "ruff>=0.17.1,<0.18"]
 
 [project.scripts]
 referee-core = "referee_core.cli:main"
@@ -24,6 +24,23 @@ packages = ["referee_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Coverage measurement. Run it with:
+#   pytest --cov=referee_core --cov-report=term-missing
+# The report is the record of which engine paths have actually been exercised.
+[tool.coverage.run]
+source = ["referee_core"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 target-version = "py310"

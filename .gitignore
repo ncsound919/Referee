@@ -20,6 +20,8 @@ __pycache__/
 
 # Coverage & test logs
 coverage/
+coverage.xml
+*.lcov
 *.log
 
 # Environment variables

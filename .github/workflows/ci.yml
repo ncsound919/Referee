@@ -35,8 +35,19 @@ jobs:
       # tests/conftest.py sets REFEREE_ENV=development so the FastAPI app runs
       # open in-process; REFEREE_API_KEY is deliberately NOT set here, so the
       # "fail closed without a key" behaviour is still covered by the suite.
+      # One run, with coverage. The report is the record of which engine paths
+      # have actually been exercised; the thresholds live in pyproject.toml and
+      # are ratcheted up as the suite grows. Running the suite a second time
+      # without coverage would double the CI time for no extra signal.
       - name: pytest
-        run: python -m pytest
+        run: python -m pytest --cov=referee_core --cov-report=term-missing --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
 
   typescript:
     name: typescript (tsc + bun test)
