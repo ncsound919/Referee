@@ -107,3 +107,69 @@ def test_development_mode_runs_open(reload_api):
     resp = client.post("/audit", json={"claim": {}, "csv_text": "patient_id,label,score,split\n"})
 
     assert resp.status_code != 503, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Key rotation
+#
+# A rotation is only safe if the engine accepts the outgoing and the incoming
+# key at the same time, for as long as it takes to move every client over.
+# These tests pin that overlap, and pin the boundary: once the old key leaves
+# the ring it really is refused, so "rotated" cannot mean "both still work
+# forever".
+# ---------------------------------------------------------------------------
+
+
+def _audit(client, key):
+    return client.post(
+        "/audit",
+        json={"claim": {}, "csv_text": "patient_id,label,score,split\n"},
+        headers={"x-referee-key": key},
+    )
+
+
+def test_both_keys_are_accepted_during_the_overlap(reload_api):
+    module = reload_api(env="production", key="old-key,new-key")
+    client = TestClient(module.app)
+
+    for key in ("old-key", "new-key"):
+        resp = _audit(client, key)
+        assert resp.status_code != 401, f"{key} was refused: {resp.text}"
+        assert resp.status_code != 503, resp.text
+
+
+def test_the_removed_key_is_refused_once_the_overlap_ends(reload_api):
+    module = reload_api(env="production", key="new-key")
+    client = TestClient(module.app)
+
+    assert _audit(client, "old-key").status_code == 401
+    assert _audit(client, "new-key").status_code != 401
+
+
+def test_semicolons_and_whitespace_also_separate_keys(reload_api):
+    module = reload_api(env="production", key=" first-key ;second-key ")
+    client = TestClient(module.app)
+
+    for key in ("first-key", "second-key"):
+        assert _audit(client, key).status_code != 401, key
+    assert _audit(client, "third-key").status_code == 401
+
+
+def test_empty_entries_do_not_open_the_service(reload_api):
+    # A trailing comma or a stray blank in the environment file must not be
+    # read as an accepted empty key.
+    module = reload_api(env="production", key=", ,,  ,")
+    client = TestClient(module.app)
+
+    resp = client.post("/audit", json={"claim": {}, "csv_text": "patient_id,label,score,split\n"})
+    assert resp.status_code == 503, resp.text
+
+    # And an empty header value is not a match either.
+    module = reload_api(env="production", key="real-key,, ")
+    client = TestClient(module.app)
+    assert client.post(
+        "/audit",
+        json={"claim": {}, "csv_text": "patient_id,label,score,split\n"},
+        headers={"x-referee-key": ""},
+    ).status_code == 401
+    assert _audit(client, "real-key").status_code != 401

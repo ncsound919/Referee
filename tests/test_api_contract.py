@@ -77,6 +77,20 @@ def test_health_is_reachable_without_a_credential():
     assert body["service"] == "referee-core"
 
 
+def test_health_reports_the_build_sha(monkeypatch):
+    """The deployed SHA is a probe result, not something found by shelling in."""
+    from referee_core import _build
+
+    monkeypatch.delenv("REFEREE_BUILD_SHA", raising=False)
+    monkeypatch.setattr(_build, "BUILD_SHA", "test-build-sha")
+    assert client.get("/health").json()["build_sha"] == "test-build-sha"
+
+
+def test_health_prefers_the_environment_build_sha(monkeypatch):
+    monkeypatch.setenv("REFEREE_BUILD_SHA", "env-build-sha")
+    assert client.get("/health").json()["build_sha"] == "env-build-sha"
+
+
 def test_the_documentation_endpoints_are_reachable_without_a_credential():
     assert client.get("/openapi.json").status_code == 200
 

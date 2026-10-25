@@ -10,7 +10,44 @@ permissions:
   contents: read
 
 jobs:
+  # Deployment must not be able to ship code that the tests reject. ci.yml runs
+  # the same gates on push, but a separate workflow cannot express `needs`, so
+  # the gates are repeated here rather than trusting that ci happened to pass.
+  python-gate:
+    name: python gate (ruff + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: ruff
+        run: python -m ruff check referee_core tests
+      - name: pytest
+        run: python -m pytest
+
+  typescript-gate:
+    name: typescript gate (tsc + bun test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+      - name: typecheck
+        run: bunx tsc --noEmit
+      - name: test
+        run: bun test
+
   build-and-deploy:
+    needs: [python-gate, typescript-gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +57,11 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      # Provenance travels inside the package: /health reports this value, so a
+      # probe can tell a stale instance from the commit that was deployed.
+      - name: Stamp the build SHA
+        run: printf 'BUILD_SHA = "%s"\n' "$GITHUB_SHA" > referee_core/_build.py
 
       # Package the Python core the same way terraform's user_data expects it.
       - name: Build deployment bundle

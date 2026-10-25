@@ -19,7 +19,14 @@ image = (
 )
 
 
-@app.function(image=image, secrets=[modal.Secret.from_name("referee-api-key")])
+@app.function(
+    image=image,
+    secrets=[
+        modal.Secret.from_name("referee-api-key"),
+        # SIEVE_URL / SIEVE_AUTH_KEY / SIEVE_TELEMETRY for the audit lane.
+        modal.Secret.from_name("sieve-referee"),
+    ],
+)
 @modal.asgi_app()
 def fastapi_app():
     import os
